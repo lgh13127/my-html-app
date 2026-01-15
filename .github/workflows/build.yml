@@ -67,7 +67,7 @@ jobs:
         
         # 创建index.html（如果不存在）
         if [ ! -f www/index.html ]; then
-          cat > www/index.html << 'HTML'
+          cat > www/index.html << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
@@ -85,7 +85,7 @@ jobs:
     <p>这是一个用HTML开发的Android应用</p>
 </body>
 </html>
-HTML
+EOF
         fi
         
         echo "资源文件创建完成"
@@ -98,7 +98,7 @@ HTML
         cp -r ../www .
         
         # 创建config.xml，禁用所有资源检查
-        cat > config.xml << 'XML'
+        cat > config.xml << 'EOF'
 <?xml version='1.0' encoding='utf-8'?>
 <widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
     <name>我的App</name>
@@ -127,7 +127,7 @@ HTML
         <preference name="AndroidWindowSplashScreenAnimatedIcon" value="false" />
     </platform>
 </widget>
-XML
+EOF
         
         # 添加Android平台（跳过资源获取）
         echo "添加Android平台..."
