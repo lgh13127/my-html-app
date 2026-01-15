@@ -30,16 +30,21 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
     
-    # 4. 安装Node.js（降级到12.x，适配Cordova 9.0.0）和Cordova
+    # 4. 安装Node.js（改用nvm，兼容Ubuntu 24.04）和Cordova
     - name: Setup Node.js and Cordova
       run: |
-        # 安装Node.js 12.x（Cordova 9.x 兼容版本）
-        curl -fsSL https://deb.nodesource.com/setup_12.x | sudo -E bash -
-        sudo apt-get install -y nodejs
+        # 安装nvm（Node版本管理器）
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+        # 加载nvm环境
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        # 安装Node.js 14.x（兼容Cordova 9.x，且nvm支持Ubuntu 24.04）
+        nvm install 14
+        nvm use 14
         # 切换npm淘宝源，解决依赖下载问题
         npm config set registry https://registry.npmmirror.com/
         # 全局安装Cordova 9.0.0
-        sudo npm install -g cordova@9.0.0
+        npm install -g cordova@9.0.0
         # 验证版本
         node -v
         npm -v
@@ -116,14 +121,14 @@ jobs:
         echo "    </platform>" >> config.xml
         echo "</widget>" >> config.xml
     
-    # 8. 构建APK（核心修改：先手动安装cordova-android，再添加平台）
+    # 8. 构建APK（核心修改：手动安装cordova-android+--nofetch）
     - name: Build APK
       run: |
         cd build
-        # 手动安装cordova-android@9.1.0到项目依赖（避免cordova-fetch的问题）
+        # 手动安装cordova-android@9.1.0到项目依赖（避免远程fetch失败）
         npm install cordova-android@9.1.0 --save
         echo "添加Android平台..."
-        # 从本地依赖添加平台，而非远程获取
+        # 从本地依赖加载平台，跳过远程fetch
         cordova platform add android@9.1.0 --nofetch
         
         echo "开始构建APK..."
