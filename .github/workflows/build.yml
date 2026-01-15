@@ -50,7 +50,7 @@ jobs:
         sudo apt-get install -y nodejs
         sudo npm install -g cordova@11.1.0
     
-    # 6. 创建和构建Cordova项目（完整修复版）
+    # 6. 创建和构建Cordova项目
     - name: Build Cordova App
       run: |
         # 创建所有必要的资源文件
@@ -90,7 +90,7 @@ HTML
         
         echo "资源文件创建完成"
         
-        # 创建项目 - 修改包名和应用名！
+        # 创建项目 - 修改包名和应用名
         cordova create build com.example.myapp "我的App"
         cd build
         
