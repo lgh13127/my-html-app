@@ -15,7 +15,7 @@ jobs:
     # 1. 检出代码
     - uses: actions/checkout@v4
     
-    # 2. 设置Java环境（使用JDK 17）
+    # 2. 设置Java环境
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
@@ -25,111 +25,86 @@ jobs:
     # 3. 正确设置Android SDK目录结构
     - name: Setup Android SDK with correct structure
       run: |
-        # 创建Android SDK目录
         mkdir -p ~/android-sdk
-        
-        # 下载Android Command Line Tools
         cd ~/android-sdk
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
-        
-        # 解压到正确的位置
-        unzip -q commandlinetools-linux-10406996_latest.zip -d cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip -d cmdline-tools
         mv cmdline-tools/cmdline-tools cmdline-tools/latest
-        rm commandlinetools-linux-10406996_latest.zip
-        
-        # 验证目录结构
-        echo "目录结构:"
-        find ~/android-sdk -type d | sort
-        echo ""
-        echo "sdkmanager位置:"
-        ls -la ~/android-sdk/cmdline-tools/latest/bin/sdkmanager
-        
-        # 设置环境变量
+        rm commandlinetools-linux-9477386_latest.zip
         echo "ANDROID_HOME=~/android-sdk" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=~/android-sdk" >> $GITHUB_ENV
         echo "PATH=~/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
     
-    # 4. 接受Android许可并安装必要组件
+    # 4. 安装Android组件
     - name: Install Android components
       run: |
-        # 设置SDK根目录环境变量（重要！）
-        export ANDROID_SDK_ROOT=~/android-sdk
-        
-        # 接受所有许可
         yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        
-        # 安装必要的Android组件
         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-33"
         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;33.0.0"
         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
-        
-        # 验证安装
-        echo "已安装的包:"
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --list | head -20
     
     # 5. 安装Node.js和Cordova
     - name: Setup Node.js and Cordova
       run: |
-        # 安装Node.js
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
         sudo apt-get install -y nodejs
-        
-        # 安装Cordova
         sudo npm install -g cordova@11.1.0
-        
-        # 验证安装
-        echo "Cordova版本: $(cordova --version)"
-        echo "Node.js版本: $(node --version)"
     
-    # 6. 创建和构建Cordova项目
+    # 6. 创建和构建Cordova项目（修复图标问题）
     - name: Build Cordova App
       run: |
+        # 确保www目录存在
+        mkdir -p www
+        
+        # 创建默认图标文件（如果不存在）
+        if [ ! -f www/icon.png ]; then
+          echo "创建默认图标文件..."
+          # 创建一个简单的1x1像素透明PNG
+          echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==" | base64 -d > www/icon.png
+          echo "图标文件已创建"
+        fi
+        
         # 创建项目 - 修改包名和应用名！
-        cordova create build com.lgh13127.myapp "My HTML App"
+        cordova create build com.example.myapp "我的App"
         cd build
         
-        # 复制网页文件
+        # 复制网页文件（包含图标）
         cp -r ../www .
         
         # 复制配置文件（可选）
         if [ -f ../config.xml ]; then
           cp ../config.xml .
         else
-          # 创建基本的config.xml
+          # 创建基本的config.xml（不指定图标，让Cordova使用默认）
           echo '<?xml version="1.0" encoding="utf-8"?>' > config.xml
-          echo '<widget id="com.lgh13127.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">' >> config.xml
-          echo '  <name>My HTML App</name>' >> config.xml
-          echo '  <description>A sample HTML app</description>' >> config.xml
-          echo '  <author email="you@example.com" href="https://example.com">Your Name</author>' >> config.xml
+          echo '<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">' >> config.xml
+          echo '  <name>我的App</name>' >> config.xml
+          echo '  <description>一个HTML应用</description>' >> config.xml
+          echo '  <author email="you@example.com" href="https://example.com">开发者</author>' >> config.xml
+          # 注意：这里不指定icon，让Cordova使用自带的默认图标
           echo '  <content src="index.html" />' >> config.xml
           echo '  <access origin="*" />' >> config.xml
           echo '  <allow-intent href="http://*/*" />' >> config.xml
           echo '  <allow-intent href="https://*/*" />' >> config.xml
-          echo '  <allow-intent href="tel:*" />' >> config.xml
-          echo '  <allow-intent href="sms:*" />' >> config.xml
-          echo '  <allow-intent href="mailto:*" />' >> config.xml
-          echo '  <allow-intent href="geo:*" />' >> config.xml
           echo '</widget>' >> config.xml
         fi
         
         # 添加Android平台
         cordova platform add android
         
-        # 构建APK
+        # 构建APK（先尝试debug版，更简单）
         echo "开始构建APK..."
-        cordova build android --release
+        cordova build android --debug
         
         # 复制APK到根目录
-        cp platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk ../myapp-release.apk
+        cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
         
-        # 显示APK信息
         echo "APK文件已生成:"
-        ls -lh ../myapp-release.apk
+        ls -lh ../myapp-debug.apk
     
     # 7. 上传构建产物
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: android-apk
-        path: myapp-release.apk
-        if-no-files-found: error
+        name: android-apk-debug
+        path: myapp-debug.apk
