@@ -62,23 +62,21 @@ jobs:
         if [ -f ../config.xml ]; then
           cp ../config.xml .
         else
-          # 创建基本的config.xml
-          cat > config.xml << 'EOF'
-<?xml version='1.0' encoding='utf-8'?>
-<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
-    <name>My HTML App</name>
-    <description>A sample HTML app</description>
-    <author email="you@example.com" href="https://example.com">Your Name</author>
-    <content src="index.html" />
-    <access origin="*" />
-    <allow-intent href="http://*/*" />
-    <allow-intent href="https://*/*" />
-    <allow-intent href="tel:*" />
-    <allow-intent href="sms:*" />
-    <allow-intent href="mailto:*" />
-    <allow-intent href="geo:*" />
-</widget>
-EOF
+          # 使用echo命令创建config.xml，避免heredoc问题
+          echo '<?xml version="1.0" encoding="utf-8"?>' > config.xml
+          echo '<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">' >> config.xml
+          echo '  <name>My HTML App</name>' >> config.xml
+          echo '  <description>A sample HTML app</description>' >> config.xml
+          echo '  <author email="you@example.com" href="https://example.com">Your Name</author>' >> config.xml
+          echo '  <content src="index.html" />' >> config.xml
+          echo '  <access origin="*" />' >> config.xml
+          echo '  <allow-intent href="http://*/*" />' >> config.xml
+          echo '  <allow-intent href="https://*/*" />' >> config.xml
+          echo '  <allow-intent href="tel:*" />' >> config.xml
+          echo '  <allow-intent href="sms:*" />' >> config.xml
+          echo '  <allow-intent href="mailto:*" />' >> config.xml
+          echo '  <allow-intent href="geo:*" />' >> config.xml
+          echo '</widget>' >> config.xml
         fi
         
         # 添加Android平台
