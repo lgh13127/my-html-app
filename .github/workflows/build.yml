@@ -22,36 +22,33 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
     
-    # 3. 设置Android SDK
-    - name: Setup Android SDK
+    # 3. 安装Android SDK（使用旧版本，兼容Java 8）
+    - name: Install Android SDK
       run: |
-        mkdir -p ~/android-sdk
-        cd ~/android-sdk
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip -d cmdline-tools
-        mv cmdline-tools/cmdline-tools cmdline-tools/latest
-        rm commandlinetools-linux-9477386_latest.zip
-        echo "ANDROID_HOME=~/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=~/android-sdk" >> $GITHUB_ENV
-        echo "PATH=~/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+        # 安装Android SDK，使用旧版本避免Java兼容性问题
+        sudo apt-get update
+        sudo apt-get install -y android-sdk
+        
+        # 设置环境变量
+        echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
+        echo "PATH=/usr/lib/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
+        
+        # 安装必要的Android组件
+        echo "安装Android组件..."
+        yes | /usr/lib/android-sdk/tools/bin/sdkmanager --licenses || true
+        /usr/lib/android-sdk/tools/bin/sdkmanager "platforms;android-29"
+        /usr/lib/android-sdk/tools/bin/sdkmanager "build-tools;29.0.3"
+        /usr/lib/android-sdk/tools/bin/sdkmanager "platform-tools"
     
-    # 4. 安装Android组件
-    - name: Install Android components
-      run: |
-        yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-29"  # Cordova Android 9.x 使用 API 29
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3"    # 对应的构建工具
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "tools"
-    
-    # 5. 安装Node.js和Cordova
+    # 4. 安装Node.js和Cordova
     - name: Setup Node.js and Cordova
       run: |
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
         sudo apt-get install -y nodejs
         sudo npm install -g cordova@9.0.0  # 使用 Cordova 9 以兼容 Android 9.x
     
-    # 6. 创建必要的资源文件
+    # 5. 创建必要的资源文件
     - name: Create Resources
       run: |
         mkdir -p www
@@ -83,14 +80,14 @@ jobs:
         
         echo "资源文件创建完成"
     
-    # 7. 创建Cordova项目
+    # 6. 创建Cordova项目
     - name: Create Cordova Project
       run: |
         cordova create build com.example.myapp "我的App"
         cd build
         cp -r ../www .
     
-    # 8. 创建config.xml
+    # 7. 创建config.xml
     - name: Create Config XML
       run: |
         cd build
@@ -122,7 +119,7 @@ jobs:
         echo "    </platform>" >> config.xml
         echo "</widget>" >> config.xml
     
-    # 9. 构建APK
+    # 8. 构建APK
     - name: Build APK
       run: |
         cd build
@@ -141,7 +138,7 @@ jobs:
         echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
         echo "APK路径: ../myapp-debug.apk"
     
-    # 10. 上传构建产物
+    # 9. 上传构建产物
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
