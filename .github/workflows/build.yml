@@ -19,7 +19,7 @@ jobs:
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '11'  # 改为Java 11，兼容性更好
         distribution: 'temurin'
     
     # 3. 设置Android SDK
@@ -39,8 +39,8 @@ jobs:
     - name: Install Android components
       run: |
         yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-33"
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;33.0.0"
+        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-30"  # 使用API 30，更稳定
+        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;30.0.3"    # 对应的构建工具
         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
     
     # 5. 安装Node.js和Cordova
@@ -48,7 +48,7 @@ jobs:
       run: |
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
         sudo apt-get install -y nodejs
-        sudo npm install -g cordova@11.1.0
+        sudo npm install -g cordova@10.0.0  # 使用Cordova 10
     
     # 6. 创建必要的资源文件
     - name: Create Resources
@@ -101,12 +101,10 @@ jobs:
         echo "    <description>一个HTML应用</description>" >> config.xml
         echo "    <author email='you@example.com' href='https://example.com'>开发者</author>" >> config.xml
         echo "" >> config.xml
-        echo "    <!-- 不指定图标和启动画面，使用Cordova默认 -->" >> config.xml
+        echo "    <!-- 使用更兼容的配置 -->" >> config.xml
         echo "    <preference name='loadUrlTimeoutValue' value='700000' />" >> config.xml
-        echo "    <preference name='AndroidXEnabled' value='true' />" >> config.xml
-        echo "    <preference name='GradlePluginKotlinEnabled' value='true' />" >> config.xml
-        echo "    <preference name='GradlePluginKotlinCodeStyle' value='official' />" >> config.xml
-        echo "    <preference name='GradlePluginKotlinVersion' value='1.6.10' />" >> config.xml
+        echo "    <preference name='android-minSdkVersion' value='21' />" >> config.xml
+        echo "    <preference name='android-targetSdkVersion' value='30' />" >> config.xml
         echo "    <preference name='AndroidInsecureFileModeEnabled' value='true' />" >> config.xml
         echo "" >> config.xml
         echo "    <content src='index.html' />" >> config.xml
@@ -129,9 +127,14 @@ jobs:
       run: |
         cd build
         echo "添加Android平台..."
-        cordova platform add android --no-fetch
+        # 使用Cordova Android 9.x，更稳定
+        cordova platform add android@9.1.0 --no-fetch
+        
         echo "开始构建APK..."
-        cordova build android --debug --no-fetch
+        # 添加--verbose参数以便调试
+        cordova build android --debug --no-fetch --verbose
+        
+        # 复制APK到根目录
         cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
         
         echo "APK构建完成！"
