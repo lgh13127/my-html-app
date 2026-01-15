@@ -19,10 +19,8 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
       with:
-        # 安装API 29的SDK和构建工具
         api-level: 29
         build-tools: 29.0.3
-        # 接受所有许可证
         run-sdkmanager: 'yes'
     
     # 3. 设置Java 8环境（Cordova Android 9.x 需要 Java 8）
@@ -32,14 +30,22 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
     
-    # 4. 安装Node.js和Cordova
+    # 4. 安装Node.js（降级到12.x，适配Cordova 9.0.0）和Cordova
     - name: Setup Node.js and Cordova
       run: |
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        # 安装Node.js 12.x（Cordova 9.x 兼容版本）
+        curl -fsSL https://deb.nodesource.com/setup_12.x | sudo -E bash -
         sudo apt-get install -y nodejs
-        sudo npm install -g cordova@9.0.0  # 使用 Cordova 9 以兼容 Android 9.x
+        # 切换npm淘宝源，解决依赖下载问题
+        npm config set registry https://registry.npmmirror.com/
+        # 全局安装Cordova 9.0.0
+        sudo npm install -g cordova@9.0.0
+        # 验证版本
+        node -v
+        npm -v
+        cordova -v
     
-    # 5. 创建必要的资源文件
+    # 5. 创建必要的资源文件（保持不变）
     - name: Create Resources
       run: |
         mkdir -p www
@@ -71,14 +77,14 @@ jobs:
         
         echo "资源文件创建完成"
     
-    # 6. 创建Cordova项目
+    # 6. 创建Cordova项目（保持不变）
     - name: Create Cordova Project
       run: |
         cordova create build com.example.myapp "我的App"
         cd build
         cp -r ../www .
     
-    # 7. 创建config.xml
+    # 7. 创建config.xml（保持不变）
     - name: Create Config XML
       run: |
         cd build
@@ -110,16 +116,17 @@ jobs:
         echo "    </platform>" >> config.xml
         echo "</widget>" >> config.xml
     
-    # 8. 构建APK
+    # 8. 构建APK（核心修改：先手动安装cordova-android，再添加平台）
     - name: Build APK
       run: |
         cd build
+        # 手动安装cordova-android@9.1.0到项目依赖（避免cordova-fetch的问题）
+        npm install cordova-android@9.1.0 --save
         echo "添加Android平台..."
-        # 使用Cordova Android 9.x，更稳定
-        cordova platform add android@9.1.0
+        # 从本地依赖添加平台，而非远程获取
+        cordova platform add android@9.1.0 --nofetch
         
         echo "开始构建APK..."
-        # 添加--verbose参数以便调试
         cordova build android --debug
         
         # 复制APK到根目录
@@ -129,7 +136,7 @@ jobs:
         echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
         echo "APK路径: ../myapp-debug.apk"
     
-    # 9. 上传构建产物
+    # 9. 上传构建产物（保持不变）
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
