@@ -5,82 +5,58 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    # 1. 检出代码
     - name: Checkout code
       uses: actions/checkout@v4
     
-    # 2. 设置JDK 11（Cordova需要）
     - name: Set up JDK 11
       uses: actions/setup-java@v4
       with:
         java-version: '11'
         distribution: 'temurin'
     
-    # 3. 安装Node.js
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
     
-    # 4. 安装Cordova
     - name: Install Cordova
       run: |
         npm install -g cordova
     
-    # 5. 安装Android SDK
-    - name: Setup Android SDK
+    - name: Setup Android SDK (JDK 11 compatible)
       uses: android-actions/setup-android@v3
+      with:
+        cmdline-tools-version: '8.0'      # 关键：使用8.0版本
+        api-level: 33                     # Android API级别
+        build-tools-version: '33.0.0'     # 构建工具版本
     
-    # 6. 接受Android SDK许可
     - name: Accept Android Licenses
       run: |
         yes | sdkmanager --licenses || true
     
-    # 7. 创建Cordova项目并构建
     - name: Build APK with Cordova
       run: |
-        # 创建Cordova项目
-        cordova create cordova-app com.example.myapp MyApp
+        # 修改这里的包名和应用名！
+        cordova create cordova-app com.com.lgh13127.myapp 我的HTML应用
         cd cordova-app
-        
-        # 复制你的网页文件到www目录
         rm -rf www
         cp -r ../www .
-        
-        # 复制config.xml（如果有自定义配置）
         if [ -f ../config.xml ]; then
           cp ../config.xml .
         fi
-        
-        # 添加Android平台
         cordova platform add android
-        
-        # 构建APK
         cordova build android --release
-        
-        # 回到项目根目录
         cd ..
     
-    # 8. 上传APK作为构建产物（使用v4版本）
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: android-apk
         path: cordova-app/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
-        # retention-days 在 v4 中不再需要，由仓库设置控制
-    
-    # 9. （可选）发布到GitHub Releases
-    - name: Create Release
-      if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: cordova-app/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
-        draft: false
-        prerelease: false
