@@ -22,8 +22,8 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
-    # 3. 正确设置Android SDK目录结构
-    - name: Setup Android SDK with correct structure
+    # 3. 设置Android SDK
+    - name: Setup Android SDK
       run: |
         mkdir -p ~/android-sdk
         cd ~/android-sdk
@@ -50,61 +50,104 @@ jobs:
         sudo apt-get install -y nodejs
         sudo npm install -g cordova@11.1.0
     
-    # 6. 创建和构建Cordova项目（修复图标问题）
+    # 6. 创建和构建Cordova项目（完整修复版）
     - name: Build Cordova App
       run: |
+        # 创建所有必要的资源文件
+        echo "创建必要的资源文件..."
+        
         # 确保www目录存在
         mkdir -p www
         
-        # 创建默认图标文件（如果不存在）
-        if [ ! -f www/icon.png ]; then
-          echo "创建默认图标文件..."
-          # 创建一个简单的1x1像素透明PNG
-          echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==" | base64 -d > www/icon.png
-          echo "图标文件已创建"
+        # 创建icon.png（1x1透明PNG）
+        echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
+        
+        # 创建splash.png（1x1透明PNG）
+        echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
+        
+        # 创建index.html（如果不存在）
+        if [ ! -f www/index.html ]; then
+          cat > www/index.html << 'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>我的App</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        h1 { color: #333; }
+        p { color: #666; }
+    </style>
+</head>
+<body>
+    <h1>欢迎使用我的App</h1>
+    <p>这是一个用HTML开发的Android应用</p>
+</body>
+</html>
+HTML
         fi
+        
+        echo "资源文件创建完成"
         
         # 创建项目 - 修改包名和应用名！
         cordova create build com.example.myapp "我的App"
         cd build
         
-        # 复制网页文件（包含图标）
+        # 复制网页文件
         cp -r ../www .
         
-        # 复制配置文件（可选）
-        if [ -f ../config.xml ]; then
-          cp ../config.xml .
-        else
-          # 创建基本的config.xml（不指定图标，让Cordova使用默认）
-          echo '<?xml version="1.0" encoding="utf-8"?>' > config.xml
-          echo '<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">' >> config.xml
-          echo '  <name>我的App</name>' >> config.xml
-          echo '  <description>一个HTML应用</description>' >> config.xml
-          echo '  <author email="you@example.com" href="https://example.com">开发者</author>' >> config.xml
-          # 注意：这里不指定icon，让Cordova使用自带的默认图标
-          echo '  <content src="index.html" />' >> config.xml
-          echo '  <access origin="*" />' >> config.xml
-          echo '  <allow-intent href="http://*/*" />' >> config.xml
-          echo '  <allow-intent href="https://*/*" />' >> config.xml
-          echo '</widget>' >> config.xml
-        fi
+        # 创建config.xml，禁用所有资源检查
+        cat > config.xml << 'XML'
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+    <name>我的App</name>
+    <description>一个HTML应用</description>
+    <author email="you@example.com" href="https://example.com">开发者</author>
+    
+    <!-- 不指定图标和启动画面，使用Cordova默认 -->
+    <preference name="loadUrlTimeoutValue" value="700000" />
+    <preference name="AndroidXEnabled" value="true" />
+    <preference name="GradlePluginKotlinEnabled" value="true" />
+    <preference name="GradlePluginKotlinCodeStyle" value="official" />
+    <preference name="GradlePluginKotlinVersion" value="1.6.10" />
+    <preference name="AndroidInsecureFileModeEnabled" value="true" />
+    
+    <content src="index.html" />
+    <access origin="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+    
+    <platform name="android">
+        <allow-intent href="market:*" />
+        <preference name="AndroidWindowSplashScreenAnimatedIcon" value="false" />
+    </platform>
+</widget>
+XML
         
-        # 添加Android平台
-        cordova platform add android
+        # 添加Android平台（跳过资源获取）
+        echo "添加Android平台..."
+        cordova platform add android --no-fetch
         
-        # 构建APK（先尝试debug版，更简单）
+        # 构建APK（跳过资源获取）
         echo "开始构建APK..."
-        cordova build android --debug
+        cordova build android --debug --no-fetch
         
         # 复制APK到根目录
         cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
         
-        echo "APK文件已生成:"
-        ls -lh ../myapp-debug.apk
+        echo "APK构建完成！"
+        echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
+        echo "APK路径: ../myapp-debug.apk"
     
     # 7. 上传构建产物
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: android-apk-debug
+        name: android-app
         path: myapp-debug.apk
+        if-no-files-found: error
