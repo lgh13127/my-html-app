@@ -31,7 +31,6 @@ jobs:
           platforms;android-33
           build-tools;33.0.0
           platform-tools
-          emulator
         accept-android-sdk-licenses: true
     
     # 4. 安装Node.js和Cordova
@@ -53,7 +52,7 @@ jobs:
     - name: Build Cordova App
       run: |
         # 创建项目 - 重要：修改包名和应用名！
-        cordova create build com.lgh13127.myapp 我的HTML应用
+        cordova create build com.example.myapp "My HTML App"
         cd build
         
         # 复制网页文件
@@ -64,9 +63,9 @@ jobs:
           cp ../config.xml .
         else
           # 创建基本的config.xml
-          cat > config.xml << EOF
+          cat > config.xml << 'EOF'
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.lgh13127.myhtmlapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
     <name>My HTML App</name>
     <description>A sample HTML app</description>
     <author email="you@example.com" href="https://example.com">Your Name</author>
@@ -88,9 +87,6 @@ EOF
         # 构建APK
         echo "开始构建APK..."
         cordova build android --release
-        
-        # 列出生成的APK文件
-        find platforms/android -name "*.apk" -type f
         
         # 复制APK到根目录
         cp platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk ../myapp-release.apk
