@@ -12,51 +12,100 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    # 1. 检出代码
+    - uses: actions/checkout@v4
     
-    - name: Set up JDK 11
+    # 2. 设置Java环境
+    - name: Setup Java
       uses: actions/setup-java@v4
       with:
         java-version: '11'
         distribution: 'temurin'
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    
-    - name: Install Cordova
-      run: |
-        npm install -g cordova
-    
-    - name: Setup Android SDK (JDK 11 compatible)
+    # 3. 安装Android SDK
+    - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        cmdline-tools-version: '8.0'      # 关键：使用8.0版本
-        api-level: 33                     # Android API级别
-        build-tools-version: '33.0.0'     # 构建工具版本
+        cmdline-tools-version: '8.0'
+        packages: |
+          platforms;android-33
+          build-tools;33.0.0
+          platform-tools
+          emulator
+        accept-android-sdk-licenses: true
     
-    - name: Accept Android Licenses
+    # 4. 安装Node.js和Cordova
+    - name: Setup Node.js and Cordova
       run: |
-        yes | sdkmanager --licenses || true
+        # 安装Node.js
+        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+        
+        # 安装Cordova
+        sudo npm install -g cordova@11.1.0
+        
+        # 验证安装
+        cordova --version
+        node --version
+        npm --version
     
-    - name: Build APK with Cordova
+    # 5. 创建和构建Cordova项目
+    - name: Build Cordova App
       run: |
-        # 修改这里的包名和应用名！
-        cordova create cordova-app com.com.lgh13127.myapp 我的HTML应用
-        cd cordova-app
-        rm -rf www
+        # 创建项目 - 重要：修改包名和应用名！
+        cordova create build com.lgh13127.myapp 我的HTML应用
+        cd build
+        
+        # 复制网页文件
         cp -r ../www .
+        
+        # 复制配置文件（可选）
         if [ -f ../config.xml ]; then
           cp ../config.xml .
+        else
+          # 创建基本的config.xml
+          cat > config.xml << EOF
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.lgh13127.myhtmlapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+    <name>My HTML App</name>
+    <description>A sample HTML app</description>
+    <author email="you@example.com" href="https://example.com">Your Name</author>
+    <content src="index.html" />
+    <access origin="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+</widget>
+EOF
         fi
+        
+        # 添加Android平台
         cordova platform add android
+        
+        # 构建APK
+        echo "开始构建APK..."
         cordova build android --release
-        cd ..
+        
+        # 列出生成的APK文件
+        find platforms/android -name "*.apk" -type f
+        
+        # 复制APK到根目录
+        cp platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk ../myapp-release.apk
     
-    - name: Upload APK artifact
+    # 6. 上传构建产物
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: android-apk
-        path: cordova-app/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
+        path: myapp-release.apk
+        if-no-files-found: error
+    
+    # 7. （可选）显示构建信息
+    - name: Display build info
+      run: |
+        echo "构建完成！"
+        echo "APK文件: myapp-release.apk"
+        echo "文件大小: $(du -h myapp-release.apk | cut -f1)"
