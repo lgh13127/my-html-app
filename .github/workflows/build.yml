@@ -14,18 +14,18 @@ jobs:
     steps:
     # 1. 检出代码
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     # 2. 设置JDK 11（Cordova需要）
     - name: Set up JDK 11
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         java-version: '11'
         distribution: 'temurin'
     
     # 3. 安装Node.js
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
     
@@ -68,13 +68,13 @@ jobs:
         # 回到项目根目录
         cd ..
     
-    # 8. 上传APK作为构建产物
+    # 8. 上传APK作为构建产物（使用v4版本）
     - name: Upload APK artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: android-apk
         path: cordova-app/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
-        retention-days: 7
+        # retention-days 在 v4 中不再需要，由仓库设置控制
     
     # 9. （可选）发布到GitHub Releases
     - name: Create Release
