@@ -15,11 +15,11 @@ jobs:
     # 1. 检出代码
     - uses: actions/checkout@v4
     
-    # 2. 设置Java环境
-    - name: Setup Java
+    # 2. 设置Java 8环境（Cordova Android 9.x 需要 Java 8）
+    - name: Setup Java 8
       uses: actions/setup-java@v4
       with:
-        java-version: '11'  # 改为Java 11，兼容性更好
+        java-version: '8'
         distribution: 'temurin'
     
     # 3. 设置Android SDK
@@ -39,16 +39,17 @@ jobs:
     - name: Install Android components
       run: |
         yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-30"  # 使用API 30，更稳定
-        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;30.0.3"    # 对应的构建工具
+        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-29"  # Cordova Android 9.x 使用 API 29
+        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3"    # 对应的构建工具
         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+        ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "tools"
     
     # 5. 安装Node.js和Cordova
     - name: Setup Node.js and Cordova
       run: |
         curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
         sudo apt-get install -y nodejs
-        sudo npm install -g cordova@10.0.0  # 使用Cordova 10
+        sudo npm install -g cordova@9.0.0  # 使用 Cordova 9 以兼容 Android 9.x
     
     # 6. 创建必要的资源文件
     - name: Create Resources
@@ -104,7 +105,7 @@ jobs:
         echo "    <!-- 使用更兼容的配置 -->" >> config.xml
         echo "    <preference name='loadUrlTimeoutValue' value='700000' />" >> config.xml
         echo "    <preference name='android-minSdkVersion' value='21' />" >> config.xml
-        echo "    <preference name='android-targetSdkVersion' value='30' />" >> config.xml
+        echo "    <preference name='android-targetSdkVersion' value='29' />" >> config.xml
         echo "    <preference name='AndroidInsecureFileModeEnabled' value='true' />" >> config.xml
         echo "" >> config.xml
         echo "    <content src='index.html' />" >> config.xml
@@ -118,7 +119,6 @@ jobs:
         echo "" >> config.xml
         echo "    <platform name='android'>" >> config.xml
         echo "        <allow-intent href='market:*' />" >> config.xml
-        echo "        <preference name='AndroidWindowSplashScreenAnimatedIcon' value='false' />" >> config.xml
         echo "    </platform>" >> config.xml
         echo "</widget>" >> config.xml
     
@@ -128,11 +128,11 @@ jobs:
         cd build
         echo "添加Android平台..."
         # 使用Cordova Android 9.x，更稳定
-        cordova platform add android@9.1.0 --no-fetch
+        cordova platform add android@9.1.0
         
         echo "开始构建APK..."
         # 添加--verbose参数以便调试
-        cordova build android --debug --no-fetch --verbose
+        cordova build android --debug
         
         # 复制APK到根目录
         cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
