@@ -1,125 +1,91 @@
-name: Build Android APK
+@echo off
+echo 修复Android SDK目录结构问题...
+echo.
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+(
+echo name: Build Android APK
+echo.
+echo on:
+echo   push:
+echo     branches: [ main, master ]
+echo   pull_request:
+echo     branches: [ main, master ]
+echo   workflow_dispatch:
+echo.
+echo jobs:
+echo   build:
+echo     runs-on: ubuntu-latest
+echo.
+echo     steps:
+echo     - uses: actions/checkout@v4
+echo.
+echo     - name: Setup Java 17
+echo       uses: actions/setup-java@v4
+echo       with:
+echo         java-version: '17'
+echo         distribution: 'temurin'
+echo.
+echo     - name: Setup Android SDK with correct directory structure
+echo       run: ^|
+echo         mkdir -p ~/android-sdk
+echo         cd ~/android-sdk
+echo         wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+echo         unzip -q commandlinetools-linux-9477386_latest.zip -d cmdline-tools
+echo         mv cmdline-tools/cmdline-tools cmdline-tools/latest
+echo         rm commandlinetools-linux-9477386_latest.zip
+echo         echo "ANDROID_HOME=~/android-sdk" ^>^> $GITHUB_ENV
+echo         echo "ANDROID_SDK_ROOT=~/android-sdk" ^>^> $GITHUB_ENV
+echo         echo "PATH=~/android-sdk/cmdline-tools/latest/bin:$PATH" ^>^> $GITHUB_ENV
+echo.
+echo     - name: Install Android components
+echo       run: ^|
+echo         yes ^| ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses ^|^| true
+echo         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-33"
+echo         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;33.0.0"
+echo         ~/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+echo.
+echo     - name: Setup Node.js and Cordova
+echo       run: ^|
+echo         curl -fsSL https://deb.nodesource.com/setup_18.x ^| sudo -E bash -
+echo         sudo apt-get install -y nodejs
+echo         sudo npm install -g cordova@11.1.0
+echo.
+echo     - name: Build Cordova App
+echo       run: ^|
+echo         cordova create build com.lgh13127.myapp "My HTML App"
+echo         cd build
+echo         cp -r ../www .
+echo         echo '^<?xml version="1.0" encoding="utf-8"?^>' ^> config.xml
+echo         echo '^<widget id="com.lgh13127.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"^>' ^>^> config.xml
+echo         echo '  ^<name^>My HTML App^</name^>' ^>^> config.xml
+echo         echo '  ^<description^>A sample HTML app^</description^>' ^>^> config.xml
+echo         echo '  ^<author email="you@example.com" href="https://example.com"^>Your Name^</author^>' ^>^> config.xml
+echo         echo '  ^<content src="index.html" /^>' ^>^> config.xml
+echo         echo '  ^<access origin="*" /^>' ^>^> config.xml
+echo         echo '  ^<allow-intent href="http://*/*" /^>' ^>^> config.xml
+echo         echo '  ^<allow-intent href="https://*/*" /^>' ^>^> config.xml
+echo         echo '  ^<allow-intent href="tel:*" /^>' ^>^> config.xml
+echo         echo '  ^<allow-intent href="sms:*" /^>' ^>^> config.xml
+echo         echo '  ^<allow-intent href="mailto:*" /^>' ^>^> config.xml
+echo         echo '  ^<allow-intent href="geo:*" /^>' ^>^> config.xml
+echo         echo '^</widget^>' ^>^> config.xml
+echo         cordova platform add android
+echo         cordova build android
+echo         cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
+echo.
+echo     - name: Upload APK
+echo       uses: actions/upload-artifact@v4
+echo       with:
+echo         name: android-apk
+echo         path: myapp-debug.apk
+) > ".github\workflows\build.yml"
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    
-    steps:
-    # 1. 检出代码
-    - uses: actions/checkout@v4
-    
-    # 2. 设置Java环境（使用JDK 17，因为新版Android SDK需要）
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'  # 改为17，兼容新版Android SDK
-        distribution: 'temurin'
-    
-    # 3. 手动设置Android SDK（避免使用android-actions/setup-android）
-    - name: Setup Android SDK manually
-      run: |
-        # 创建Android SDK目录
-        mkdir -p ~/android-sdk
-        
-        # 下载Android Command Line Tools
-        # 使用较新的版本（需要JDK 17）
-        cd ~/android-sdk
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
-        unzip -q commandlinetools-linux-10406996_latest.zip
-        rm commandlinetools-linux-10406996_latest.zip
-        
-        # 设置环境变量
-        echo "ANDROID_HOME=~/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=~/android-sdk" >> $GITHUB_ENV
-        echo "PATH=~/android-sdk/cmdline-tools/bin:$PATH" >> $GITHUB_ENV
-        
-        # 验证下载
-        ls -la ~/android-sdk/
-    
-    # 4. 接受Android许可并安装必要组件
-    - name: Install Android components
-      run: |
-        # 接受所有许可
-        yes | ~/android-sdk/cmdline-tools/bin/sdkmanager --licenses || true
-        
-        # 安装必要的Android组件
-        ~/android-sdk/cmdline-tools/bin/sdkmanager "platforms;android-33"
-        ~/android-sdk/cmdline-tools/bin/sdkmanager "build-tools;33.0.0"
-        ~/android-sdk/cmdline-tools/bin/sdkmanager "platform-tools"
-        
-        # 验证安装
-        ~/android-sdk/cmdline-tools/bin/sdkmanager --list
-    
-    # 5. 安装Node.js和Cordova
-    - name: Setup Node.js and Cordova
-      run: |
-        # 安装Node.js
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-        
-        # 安装Cordova
-        sudo npm install -g cordova@11.1.0
-        
-        # 验证安装
-        echo "Cordova版本: $(cordova --version)"
-        echo "Node.js版本: $(node --version)"
-    
-    # 6. 创建和构建Cordova项目
-    - name: Build Cordova App
-      run: |
-        # 创建项目 - 修改包名和应用名！
-        cordova create build com.lgh13127.myapp "My HTML App"
-        cd build
-        
-        # 复制网页文件
-        cp -r ../www .
-        
-        # 复制配置文件（可选）
-        if [ -f ../config.xml ]; then
-          cp ../config.xml .
-        else
-          # 创建基本的config.xml
-          echo '<?xml version="1.0" encoding="utf-8"?>' > config.xml
-          echo '<widget id="com.lgh13127.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">' >> config.xml
-          echo '  <name>My HTML App</name>' >> config.xml
-          echo '  <description>A sample HTML app</description>' >> config.xml
-          echo '  <author email="you@example.com" href="https://example.com">Your Name</author>' >> config.xml
-          echo '  <content src="index.html" />' >> config.xml
-          echo '  <access origin="*" />' >> config.xml
-          echo '  <allow-intent href="http://*/*" />' >> config.xml
-          echo '  <allow-intent href="https://*/*" />' >> config.xml
-          echo '  <allow-intent href="tel:*" />' >> config.xml
-          echo '  <allow-intent href="sms:*" />' >> config.xml
-          echo '  <allow-intent href="mailto:*" />' >> config.xml
-          echo '  <allow-intent href="geo:*" />' >> config.xml
-          echo '</widget>' >> config.xml
-        fi
-        
-        # 添加Android平台
-        cordova platform add android
-        
-        # 构建APK
-        echo "开始构建APK..."
-        cordova build android --release
-        
-        # 复制APK到根目录
-        cp platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk ../myapp-release.apk
-        
-        # 显示APK信息
-        echo "APK文件已生成:"
-        ls -lh ../myapp-release.apk
-    
-    # 7. 上传构建产物
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: android-apk
-        path: myapp-release.apk
-        if-no-files-found: error
+echo 工作流文件创建完成！
+echo 请修改包名和应用名：
+echo 1. 打开 .github\workflows\build.yml
+echo 2. 找到所有 "com.lgh13127.myapp" 改为你的包名
+echo 3. 找到 "My HTML App" 改为你的应用名
+echo.
+echo 注意：这个版本构建的是debug版APK，可以直接安装测试。
+echo.
+pause
