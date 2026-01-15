@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+    <name>我的App</name>
+    <description>一个用HTML制作的Android应用</description>
+    <author email="you@example.com" href="https://example.com">你的名字</author>
+    
+    <!-- 应用图标（可选） -->
+    <icon src="www/icon.png" />
+    
+    <!-- 启动画面（可选） -->
+    <splash src="www/splash.png" />
+    
+    <!-- 权限（根据需要添加） -->
+    <platform name="android">
+        <allow-intent href="market:*" />
+        <preference name="android-minSdkVersion" value="22" />
+        <preference name="android-targetSdkVersion" value="33" />
+    </platform>
+    
+    <content src="index.html" />
+    <access origin="*" />
+</widget>
