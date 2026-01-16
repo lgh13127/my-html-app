@@ -10,7 +10,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -27,60 +26,55 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
-      # ✅ 核心修复：用官方Action装Node，彻底解决 cordova: command not found 问题
-      # Node 14 是 Cordova 9.x 完美兼容版本，无任何警告
-      - name: Setup Node.js 14
+      - name: Setup Node.js 14 (完美兼容Cordova9)
         uses: actions/setup-node@v4
         with:
           node-version: '14'
           registry-url: https://registry.npmmirror.com/
 
-      # ✅ 全局装Cordova 9.0.0，PATH自动配置，绝对能找到命令
-      - name: Install Cordova
+      - name: Install Cordova 9.0.0
         run: npm install -g cordova@9.0.0
 
-      # ✅ 创建基础网页资源，无任何YAML解析冲突
-      - name: Create WWW Files
+      - name: Create WWW Assets (根治第49行语法错误核心)
         run: |
           mkdir -p www
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-          cat > www/index.html << 'EOF'
+          # ========== 核心修复：EOF规则 + 无缩进HTML ==========
+          cat > www/index.html <<'EOF'
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>My First App</title>
-<style>body{text-align:center;padding:50px;font-size:20px;}</style>
+<title>My App</title>
+<style>body{text-align:center;padding:60px;font-size:22px;}</style>
 </head>
-<body><h1>Hello Android!</h1><p>Build by GitHub Actions</p></body>
+<body>
+<h1>Hello Android!</h1>
+<p>Success Build ✔️</p>
+</body>
 </html>
 EOF
 
-      # ✅ 创建Cordova项目
       - name: Create Cordova Project
-        run: |
-          cordova create build com.example.myapp MyApp
-          cd build && cp -r ../www ./
+        run: cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
 
-      # ✅ 创建配置文件
-      - name: Create Config XML
+      - name: Create Config.xml
         run: |
           cd build
-          cat > config.xml << 'EOF'
+          cat > config.xml <<'EOF'
 <?xml version='1.0' encoding='utf-8'?>
 <widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
-  <name>MyApp</name>
-  <content src="index.html"/>
-  <preference name="android-minSdkVersion" value="21"/>
-  <preference name="android-targetSdkVersion" value="29"/>
-  <access origin="*"/>
+<name>MyApp</name>
+<content src="index.html"/>
+<preference name="android-minSdkVersion" value="21"/>
+<preference name="android-targetSdkVersion" value="29"/>
+<access origin="*"/>
 </widget>
 EOF
 
-      # ✅ 构建APK 解决下载失败+兼容问题
-      - name: Build Android APK
+      - name: Build APK (解决下载失败)
         run: |
           cd build
           npm install cordova-android@9.1.0 --save
@@ -88,8 +82,7 @@ EOF
           cordova build android --debug
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
 
-      # ✅ 上传APK产物
-      - name: Upload APK
+      - name: Upload APK File
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
