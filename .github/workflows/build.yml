@@ -19,10 +19,8 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
       with:
-        # 安装API 29的SDK和构建工具
         api-level: 29
         build-tools: 29.0.3
-        # 接受所有许可证
         run-sdkmanager: 'yes'
     
     # 3. 设置Java 8环境（Cordova Android 9.x 需要 Java 8）
@@ -39,7 +37,7 @@ jobs:
         sudo apt-get install -y nodejs
         sudo npm install -g cordova@9.0.0  # 使用 Cordova 9 以兼容 Android 9.x
     
-    # 5. 创建必要的资源文件（修复YAML语法错误：改用Here Document）
+    # 5. 创建必要的资源文件（核心修复：替换逐行echo）
     - name: Create Resources
       run: |
         mkdir -p www
@@ -50,7 +48,7 @@ jobs:
         # 创建splash.png（1x1透明PNG）
         echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
         
-        # 创建简单的index.html文件（改用Here Document，避免逐行echo的YAML解析问题）
+        # 创建index.html：用Here Document规避YAML解析特殊字符
         cat > www/index.html << 'EOF'
 <!DOCTYPE html>
 <html>
@@ -80,12 +78,10 @@ EOF
         cd build
         cp -r ../www .
     
-    # 7. 创建config.xml（同样改用Here Document，避免逐行echo的问题）
+    # 7. 创建config.xml（同样替换逐行echo，避免后续报错）
     - name: Create Config XML
       run: |
         cd build
-        
-        # 改用Here Document创建config.xml，彻底解决YAML解析问题
         cat > config.xml << 'EOF'
 <?xml version='1.0' encoding='utf-8'?>
 <widget id='com.example.myapp' version='1.0.0' xmlns='http://www.w3.org/ns/widgets'>
@@ -119,11 +115,9 @@ EOF
       run: |
         cd build
         echo "添加Android平台..."
-        # 使用Cordova Android 9.x，更稳定
         cordova platform add android@9.1.0
         
         echo "开始构建APK..."
-        # 添加--verbose参数以便调试
         cordova build android --debug
         
         # 复制APK到根目录
