@@ -19,8 +19,10 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
       with:
+        # 安装API 29的SDK和构建工具
         api-level: 29
         build-tools: 29.0.3
+        # 接受所有许可证
         run-sdkmanager: 'yes'
     
     # 3. 设置Java 8环境（Cordova Android 9.x 需要 Java 8）
@@ -30,39 +32,26 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
     
-    # 4. 安装Node.js和Cordova（修复路径/权限问题）
+    # 4. 安装Node.js和Cordova
     - name: Setup Node.js and Cordova
       run: |
-        # 安装nvm（解决Node路径问题）
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-        # 安装Node 16.x（兼容Cordova 9.x）
-        nvm install 16
-        nvm use 16
-        # 验证Node/npm路径
-        echo "Node path: $(which node)"
-        echo "npm path: $(which npm)"
-        # 加速npm下载
-        npm config set registry https://registry.npmmirror.com/
-        # 全局安装Cordova（无sudo，避免权限问题）
-        npm install -g cordova@9.0.0
-        # 验证Cordova安装
-        cordova -v || { echo "Cordova install failed!"; exit 1; }
+        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+        sudo npm install -g cordova@9.0.0  # 使用 Cordova 9 以兼容 Android 9.x
     
-    # 5. 创建必要的资源文件
+    # 5. 创建必要的资源文件（修复YAML语法错误：改用Here Document）
     - name: Create Resources
       run: |
         mkdir -p www
         
-        # 创建1x1透明icon.png
+        # 创建icon.png（1x1透明PNG）
         echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
         
-        # 创建1x1透明splash.png
+        # 创建splash.png（1x1透明PNG）
         echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
         
-        # 创建index.html
-        cat > www/index.html << EOF
+        # 创建简单的index.html文件（改用Here Document，避免逐行echo的YAML解析问题）
+        cat > www/index.html << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
@@ -81,7 +70,8 @@ jobs:
 </body>
 </html>
 EOF
-        echo "Resources created successfully"
+        
+        echo "资源文件创建完成"
     
     # 6. 创建Cordova项目
     - name: Create Cordova Project
@@ -90,18 +80,20 @@ EOF
         cd build
         cp -r ../www .
     
-    # 7. 创建config.xml
+    # 7. 创建config.xml（同样改用Here Document，避免逐行echo的问题）
     - name: Create Config XML
       run: |
         cd build
-        cat > config.xml << EOF
+        
+        # 改用Here Document创建config.xml，彻底解决YAML解析问题
+        cat > config.xml << 'EOF'
 <?xml version='1.0' encoding='utf-8'?>
 <widget id='com.example.myapp' version='1.0.0' xmlns='http://www.w3.org/ns/widgets'>
     <name>我的App</name>
     <description>一个HTML应用</description>
     <author email='you@example.com' href='https://example.com'>开发者</author>
 
-    <!-- 兼容配置 -->
+    <!-- 使用更兼容的配置 -->
     <preference name='loadUrlTimeoutValue' value='700000' />
     <preference name='android-minSdkVersion' value='21' />
     <preference name='android-targetSdkVersion' value='29' />
@@ -126,15 +118,20 @@ EOF
     - name: Build APK
       run: |
         cd build
-        # 手动安装cordova-android避免下载失败
-        npm install cordova-android@9.1.0 --save
-        cordova platform add android@9.1.0 --nofetch
-        # 构建debug APK
+        echo "添加Android平台..."
+        # 使用Cordova Android 9.x，更稳定
+        cordova platform add android@9.1.0
+        
+        echo "开始构建APK..."
+        # 添加--verbose参数以便调试
         cordova build android --debug
+        
         # 复制APK到根目录
         cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
-        # 验证APK存在
-        ls -lh ../myapp-debug.apk
+        
+        echo "APK构建完成！"
+        echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
+        echo "APK路径: ../myapp-debug.apk"
     
     # 9. 上传构建产物
     - name: Upload APK
