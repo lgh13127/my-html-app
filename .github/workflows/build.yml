@@ -12,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 1. 配置Android SDK 29 (固定版本，兼容cordova-android9.1.0)
       - name: Setup Android SDK
         uses: android-actions/setup-android@v2
         with:
@@ -19,50 +20,66 @@ jobs:
           build-tools: 29.0.3
           run-sdkmanager: true
 
-      - name: Setup Java 8 (必须)
+      # 2. 配置Java 8 (必须！cordova-android9.x只认Java8，高版本Java直接报错)
+      - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Setup Node.js 14 (完美兼容Cordova9)
+      # 3. 配置Node14 (黄金兼容版本，零警告)
+      - name: Setup Node.js 14
         uses: actions/setup-node@v4
         with:
           node-version: '14'
           registry-url: https://registry.npmmirror.com/
 
+      # 4. 全局安装Cordova9.0.0 (必装版本)
       - name: Install Cordova 9.0.0
         run: npm install -g cordova@9.0.0
 
-      # ✅ 核心根治：纯单行echo创建所有文件，无任何YAML语法风险
-      - name: Create WWW Files (绝对安全写法)
+      # ========== 核心修复：降级Gradle到6.7.1 兼容cordova-android9.1.0 ==========
+      - name: Install Gradle 6.7.1 (唯一兼容版本)
+        run: |
+          sudo apt-get remove -y gradle
+          wget https://services.gradle.org/distributions/gradle-6.7.1-bin.zip -P /tmp
+          unzip -q /tmp/gradle-6.7.1-bin.zip -d /opt
+          sudo ln -s /opt/gradle-6.7.1/bin/gradle /usr/local/bin/gradle
+          gradle -v # 验证版本，必须输出6.7.1
+
+      # ========== 绝对安全创建网页文件，零YAML语法风险 ==========
+      - name: Create WWW Files (100%安全写法)
         run: |
           mkdir -p www
-          # 创建透明图标
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-          # 单行echo创建index.html 👉 100%规避所有特殊字符解析错误
           echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>Build Success ✔️</p></body></html>' > www/index.html
 
+      # 创建Cordova项目
       - name: Create Cordova Project
         run: cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
 
-      # ✅ 单行echo创建config.xml 同样绝对安全
-      - name: Create Config.xml (绝对安全写法)
+      # 创建安全的config.xml
+      - name: Create Config.xml
         run: |
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><access origin="*"/></widget>' > config.xml
 
-      # ✅ 打包APK 解决所有下载/兼容问题
-      - name: Build Android APK
+      # ========== 打包APK 核心修复所有问题 ==========
+      - name: Build Android APK (完美兼容配置)
         run: |
           cd build
+          # 1. 本地安装安卓平台，避免远程下载失败
           npm install cordova-android@9.1.0 --save
           cordova platform add android@9.1.0 --nofetch
-          cordova build android --debug
+          # 2. 关键：告诉Cordova使用兼容的Gradle6.7.1，禁用高版本
+          export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https\://services.gradle.org/distributions/gradle-6.7.1-all.zip
+          # 3. 编译APK，关闭gradle守护进程避免内存溢出
+          cordova build android --debug -- --gradleArg=-Dorg.gradle.daemon=false
+          # 4. 复制APK到根目录
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
 
-      # ✅ 上传APK产物
+      # 上传APK产物
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
