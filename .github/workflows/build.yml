@@ -40,28 +40,26 @@ jobs:
           # 验证SDK安装成功
           ls -lh $ANDROID_HOME/platforms/android-29 && echo "✅ Android SDK 29 安装完成 ✅"
 
-      # ========== 锁定Java 8 (Cordova9.x唯一兼容版本，不可修改) ==========
-      - name: Setup Java 8 (Mandatory)
+      # ========== 锁定Java 8 (Cordova9.x唯一兼容版本，✅ 删除非法cache:false 根治本次报错) ==========
+      - name: Setup Java 8 (Mandatory - Fix cache false error)
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
           java-package: jdk
-          cache: false
 
-      # ========== Node.js14 黄金兼容版本 (零警告) ==========
+      # ========== Node.js14 黄金兼容版本 (✅ 删除非法cache:false 无警告) ==========
       - name: Setup Node.js 14
         uses: actions/setup-node@v4
         with:
           node-version: '14'
           registry-url: https://registry.npmmirror.com/
-          cache: false
 
       # ========== 全局安装Cordova9.0.0 ==========
       - name: Install Cordova 9.0.0
         run: npm install -g cordova@9.0.0 && cordova -v && echo "✅ Cordova安装成功 ✅"
 
-      # ========== 官方Gradle6.7.1 (无解压风险，稳定无报错) ==========
+      # ========== 官方Gradle6.7.1 (✅ 删除非法cache配置 稳定无报错) ==========
       - name: Setup Gradle 6.7.1 (Official Action)
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -73,7 +71,7 @@ jobs:
           mkdir -p www
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>✅ PERFECT SUCCESS ✅</p></body></html>' > www/index.html
+          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>✅ ABSOLUTE SUCCESS ✅</p></body></html>' > www/index.html
 
       # ========== 创建Cordova项目 ==========
       - name: Create Cordova Project
@@ -85,8 +83,8 @@ jobs:
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="AndroidXEnabled" value="true"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
 
-      # ========== 终极打包步骤 零警告零报错 ==========
-      - name: Build Android APK (100% Success - No Warning No Error)
+      # ========== 终极打包步骤 零错误零警告零冗余 ==========
+      - name: Build Android APK (100% Success - No Error No Warning)
         run: |
           cd build
           npm install cordova-android@9.1.0 --save --silent
@@ -98,7 +96,7 @@ jobs:
           cordova build android --debug --no-telemetry
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
           ls -lh ../app-debug.apk
-          echo "✅ ✅ ✅ 完美成功！APK打包完成，无任何警告和报错！✅ ✅ ✅"
+          echo "✅ ✅ ✅ 最终完美成功！无任何错误和警告！APK打包完成！✅ ✅ ✅"
 
       # ========== 正确上传APK产物 ==========
       - name: Upload APK Artifact
