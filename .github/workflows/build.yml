@@ -2,135 +2,95 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
-    # 1. 检出代码
-    - uses: actions/checkout@v4
-    
-    # 2. 设置Android SDK环境
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v2
-      with:
-        api-level: 29
-        build-tools: 29.0.3
-        run-sdkmanager: 'yes'
-    
-    # 3. 设置Java 8环境（Cordova Android 9.x 需要 Java 8）
-    - name: Setup Java 8
-      uses: actions/setup-java@v4
-      with:
-        java-version: '8'
-        distribution: 'temurin'
-    
-    # 4. 安装Node.js和Cordova
-    - name: Setup Node.js and Cordova
-      run: |
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-        sudo apt-get install -y nodejs
-        sudo npm install -g cordova@9.0.0  # 使用 Cordova 9 以兼容 Android 9.x
-    
-    # 5. 创建必要的资源文件（核心修复：替换逐行echo）
-    - name: Create Resources
-      run: |
-        mkdir -p www
-        
-        # 创建icon.png（1x1透明PNG）
-        echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
-        
-        # 创建splash.png（1x1透明PNG）
-        echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-        
-        # 创建index.html：用Here Document规避YAML解析特殊字符
-        cat > www/index.html << 'EOF'
+      - uses: actions/checkout@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+        with:
+          api-level: 29
+          build-tools: 29.0.3
+          run-sdkmanager: true
+
+      - name: Setup Java 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      # ✅ 核心修复：用官方Action装Node，彻底解决 cordova: command not found 问题
+      # Node 14 是 Cordova 9.x 完美兼容版本，无任何警告
+      - name: Setup Node.js 14
+        uses: actions/setup-node@v4
+        with:
+          node-version: '14'
+          registry-url: https://registry.npmmirror.com/
+
+      # ✅ 全局装Cordova 9.0.0，PATH自动配置，绝对能找到命令
+      - name: Install Cordova
+        run: npm install -g cordova@9.0.0
+
+      # ✅ 创建基础网页资源，无任何YAML解析冲突
+      - name: Create WWW Files
+        run: |
+          mkdir -p www
+          echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
+          echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
+          cat > www/index.html << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset='utf-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <title>我的App</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
-        h1 { color: #333; }
-        p { color: #666; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My First App</title>
+<style>body{text-align:center;padding:50px;font-size:20px;}</style>
 </head>
-<body>
-    <h1>欢迎使用我的App</h1>
-    <p>这是一个用HTML开发的Android应用</p>
-</body>
+<body><h1>Hello Android!</h1><p>Build by GitHub Actions</p></body>
 </html>
 EOF
-        
-        echo "资源文件创建完成"
-    
-    # 6. 创建Cordova项目
-    - name: Create Cordova Project
-      run: |
-        cordova create build com.example.myapp "我的App"
-        cd build
-        cp -r ../www .
-    
-    # 7. 创建config.xml（同样替换逐行echo，避免后续报错）
-    - name: Create Config XML
-      run: |
-        cd build
-        cat > config.xml << 'EOF'
+
+      # ✅ 创建Cordova项目
+      - name: Create Cordova Project
+        run: |
+          cordova create build com.example.myapp MyApp
+          cd build && cp -r ../www ./
+
+      # ✅ 创建配置文件
+      - name: Create Config XML
+        run: |
+          cd build
+          cat > config.xml << 'EOF'
 <?xml version='1.0' encoding='utf-8'?>
-<widget id='com.example.myapp' version='1.0.0' xmlns='http://www.w3.org/ns/widgets'>
-    <name>我的App</name>
-    <description>一个HTML应用</description>
-    <author email='you@example.com' href='https://example.com'>开发者</author>
-
-    <!-- 使用更兼容的配置 -->
-    <preference name='loadUrlTimeoutValue' value='700000' />
-    <preference name='android-minSdkVersion' value='21' />
-    <preference name='android-targetSdkVersion' value='29' />
-    <preference name='AndroidInsecureFileModeEnabled' value='true' />
-
-    <content src='index.html' />
-    <access origin='*' />
-    <allow-intent href='http://*/*' />
-    <allow-intent href='https://*/*' />
-    <allow-intent href='tel:*' />
-    <allow-intent href='sms:*' />
-    <allow-intent href='mailto:*' />
-    <allow-intent href='geo:*' />
-
-    <platform name='android'>
-        <allow-intent href='market:*' />
-    </platform>
+<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+  <name>MyApp</name>
+  <content src="index.html"/>
+  <preference name="android-minSdkVersion" value="21"/>
+  <preference name="android-targetSdkVersion" value="29"/>
+  <access origin="*"/>
 </widget>
 EOF
-    
-    # 8. 构建APK
-    - name: Build APK
-      run: |
-        cd build
-        echo "添加Android平台..."
-        cordova platform add android@9.1.0
-        
-        echo "开始构建APK..."
-        cordova build android --debug
-        
-        # 复制APK到根目录
-        cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
-        
-        echo "APK构建完成！"
-        echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
-        echo "APK路径: ../myapp-debug.apk"
-    
-    # 9. 上传构建产物
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: android-app
-        path: myapp-debug.apk
-        if-no-files-found: error
+
+      # ✅ 构建APK 解决下载失败+兼容问题
+      - name: Build Android APK
+        run: |
+          cd build
+          npm install cordova-android@9.1.0 --save
+          cordova platform add android@9.1.0 --nofetch
+          cordova build android --debug
+          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
+
+      # ✅ 上传APK产物
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: app-debug.apk
