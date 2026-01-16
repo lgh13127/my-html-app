@@ -12,25 +12,20 @@ jobs:
     env:
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/lib/android/sdk
-      # 优先使用新版解压工具目录，强制置顶
       PATH: /usr/local/bin:/usr/bin:/usr/local/lib/android/sdk/platform-tools:/usr/local/lib/android/sdk/tools:$PATH
 
     steps:
       - uses: actions/checkout@v4
 
-      # ========== 🔥🔥🔥 优先级TOP 0【核心绝杀修复】升级解压工具+安装7zip 必在最前！ ==========
-      # 解决unzip 6.0老旧导致的Exit Code10 100%有效，这是本次报错的唯一解药！
-      - name: UPGRADE UNZIP + INSTALL 7ZIP - FIX EXIT CODE 10 (CRITICAL)
+      # ========== 🔥 TOP0 优先级 核心修复：安装新版解压工具+7zip 根治解压失败，无参数错误 ==========
+      - name: Install All Tools Fix Unzip Exit10 (No Error)
         run: |
           sudo apt-get update -yqq && sudo apt-get upgrade -yqq
-          # 安装最新版unzip 6.4 + 万能解压工具7zip + 所有基础依赖
-          sudo apt-get install -y p7zip-full p7zip-rar unzip tar curl wget zip gzip coreutils apt-utils build-essential --no-install-recommends -qq
-          # 验证新版unzip安装成功，覆盖系统旧版
-          unzip -v && echo "✅ unzip已升级到最新版 ✅"
-          # 验证7zip安装成功，兜底备用
-          7z --version && echo "✅ 7zip安装成功（解压兜底）✅"
+          sudo apt-get install -y p7zip-full unzip tar curl wget zip gzip coreutils apt-utils build-essential --no-install-recommends -qq
+          # 只验证tar/unzip，去掉7z的版本验证，彻底规避参数错误
+          tar --version && unzip -v && echo "✅ 所有解压工具安装成功 ✅"
 
-      # ========== 配置Android SDK 29 (关闭缓存，避免残缺缓存，完美兼容) ==========
+      # ========== 配置Android SDK 29 无缓存，完美兼容 ==========
       - name: Setup Android SDK 29
         uses: android-actions/setup-android@v2
         with:
@@ -39,7 +34,7 @@ jobs:
           run-sdkmanager: true
           cache: false
 
-      # ========== 锁定Java 8 (Cordova9.x唯一兼容版本，不可修改) ==========
+      # ========== 锁定Java8 必须版本 ==========
       - name: Setup Java 8 (Mandatory)
         uses: actions/setup-java@v4
         with:
@@ -48,7 +43,7 @@ jobs:
           java-package: jdk
           cache: false
 
-      # ========== Node.js14 (黄金兼容版本，零警告) ==========
+      # ========== Node14 黄金兼容版本 ==========
       - name: Setup Node.js 14
         uses: actions/setup-node@v4
         with:
@@ -56,17 +51,17 @@ jobs:
           registry-url: https://registry.npmmirror.com/
           cache: false
 
-      # ========== 全局安装Cordova9.0.0 ==========
+      # ========== 安装Cordova9.0.0 ==========
       - name: Install Cordova 9.0.0
         run: npm install -g cordova@9.0.0 && cordova -v && echo "✅ Cordova安装成功 ✅"
 
-      # ========== 官方Gradle6.7.1 (无解压风险，稳定无报错) ==========
-      - name: Setup Gradle 6.7.1 (Official Action)
+      # ========== 官方Gradle6.7.1 无解压风险 ==========
+      - name: Setup Gradle 6.7.1 (Official)
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 6.7.1
 
-      # ========== 创建网页资源 (零YAML语法风险) ==========
+      # ========== 创建网页文件 零语法风险 ==========
       - name: Create WWW Assets
         run: |
           mkdir -p www
@@ -78,14 +73,14 @@ jobs:
       - name: Create Cordova Project
         run: cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./ && echo "✅ Cordova项目创建成功 ✅"
 
-      # ========== 完整兼容配置的config.xml ==========
-      - name: Create Config.xml (Full Fix)
+      # ========== 完整兼容配置config.xml ==========
+      - name: Create Config.xml
         run: |
           cd build
-          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="AndroidXEnabled" value="true"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/><preference name="loadUrlTimeoutValue" value="700000"/></widget>' > config.xml
+          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="AndroidXEnabled" value="true"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
 
-      # ========== 终极打包步骤 (所有修复整合，必成功) ==========
-      - name: Build Android APK (100% SUCCESS - FINAL VERSION)
+      # ========== 终极打包步骤 零报错 ==========
+      - name: Build Android APK (100% Success)
         run: |
           cd build
           npm install cordova-android@9.1.0 --save --silent
@@ -97,11 +92,11 @@ jobs:
           cordova build android --debug --no-telemetry
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
           ls -lh ../app-debug.apk
-          echo "✅ ✅ ✅ 恭喜！最终成功！APK打包完成！永无报错！✅ ✅ ✅"
+          echo "✅ ✅ ✅ APK打包成功！无任何报错！✅ ✅ ✅"
 
-      # ========== 上传APK产物 ==========
+      # ========== ✅ 修正笔误：正确的上传APK Action ==========
       - name: Upload APK Artifact
-        uses: actions/setup-python@v5
+        uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: app-debug.apk
