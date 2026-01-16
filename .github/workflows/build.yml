@@ -1,19 +1,3 @@
-# 打印npm全局包安装路径
-npm config get prefix
-# 列出npm全局安装的包
-npm list -g --depth=0
-# 检查PATH中是否包含npm全局路径
-echo $PATH | tr ':' '\n' | grep -i "npm"
-```{insert\_element\_0\_}### 问题核心原因
-`cordova: command not found` 本质是 **Cordova 未被正确安装到 Runner 的环境 PATH 中**，具体诱因：
-1. `sudo npm install -g cordova` 会将 Cordova 安装到系统级目录（如 `/usr/local/bin`），但 GitHub Actions 的 Ubuntu 24.04 环境中该目录的权限/路径映射异常；
-2. 原 `nodesource` 安装 Node 18.x 的方式，在 Ubuntu 24.04 下仍存在隐性的路径配置问题；
-3. 缺少对 Cordova 安装后的验证步骤，无法提前发现安装失败。
-
-### 修复后的完整 `build.yml`
-核心修改 `Step 4（Setup Node.js and Cordova）`，并补充路径校验：
-
-```yaml
 name: Build Android APK
 
 on:
@@ -46,122 +30,113 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
     
-    # 4. 安装Node.js和Cordova（核心修复：改用nvm，避免路径问题）
+    # 4. 安装Node.js和Cordova（修复路径/权限问题）
     - name: Setup Node.js and Cordova
       run: |
-        # 安装nvm（Node版本管理器，跨系统兼容）
+        # 安装nvm（解决Node路径问题）
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-        # 加载nvm到当前shell
         export NVM_DIR="$HOME/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-        # 安装Node 16.x（兼容Cordova 9.x，且nvm自动配置PATH）
+        # 安装Node 16.x（兼容Cordova 9.x）
         nvm install 16
         nvm use 16
-        # 验证Node/npm路径（关键：确保nvm的Node生效）
-        echo "Node路径: $(which node)"
-        echo "npm路径: $(which npm)"
-        # 切换npm镜像源，加速依赖下载
+        # 验证Node/npm路径
+        echo "Node path: $(which node)"
+        echo "npm path: $(which npm)"
+        # 加速npm下载
         npm config set registry https://registry.npmmirror.com/
-        # 全局安装Cordova 9.0.0（不用sudo，nvm环境下安装到用户目录，PATH自动识别）
+        # 全局安装Cordova（无sudo，避免权限问题）
         npm install -g cordova@9.0.0
-        # 验证Cordova安装（关键：提前发现安装失败）
-        echo "Cordova路径: $(which cordova)"
-        cordova -v || { echo "Cordova安装失败！"; exit 1; }
-        # 打印环境信息，便于调试
-        echo "NODE_PATH: $NODE_PATH"
-        echo "PATH: $PATH"
+        # 验证Cordova安装
+        cordova -v || { echo "Cordova install failed!"; exit 1; }
     
-    # 5. 创建必要的资源文件（无修改）
+    # 5. 创建必要的资源文件
     - name: Create Resources
       run: |
         mkdir -p www
         
-        # 创建icon.png（1x1透明PNG）
+        # 创建1x1透明icon.png
         echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
         
-        # 创建splash.png（1x1透明PNG）
+        # 创建1x1透明splash.png
         echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
         
-        # 创建简单的index.html文件
-        echo "<!DOCTYPE html>" > www/index.html
-        echo "<html>" >> www/index.html
-        echo "<head>" >> www/index.html
-        echo "    <meta charset='utf-8'>" >> www/index.html
-        echo "    <meta name='viewport' content='width=device-width, initial-scale=1'>" >> www/index.html
-        echo "    <title>我的App</title>" >> www/index.html
-        echo "    <style>" >> www/index.html
-        echo "        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }" >> www/index.html
-        echo "        h1 { color: #333; }" >> www/index.html
-        echo "        p { color: #666; }" >> www/index.html
-        echo "    </style>" >> www/index.html
-        echo "</head>" >> www/index.html
-        echo "<body>" >> www/index.html
-        echo "    <h1>欢迎使用我的App</h1>" >> www/index.html
-        echo "    <p>这是一个用HTML开发的Android应用</p>" >> www/index.html
-        echo "</body>" >> www/index.html
-        echo "</html>" >> www/index.html
-        
-        echo "资源文件创建完成"
+        # 创建index.html
+        cat > www/index.html << EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>我的App</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        h1 { color: #333; }
+        p { color: #666; }
+    </style>
+</head>
+<body>
+    <h1>欢迎使用我的App</h1>
+    <p>这是一个用HTML开发的Android应用</p>
+</body>
+</html>
+EOF
+        echo "Resources created successfully"
     
-    # 6. 创建Cordova项目（无修改）
+    # 6. 创建Cordova项目
     - name: Create Cordova Project
       run: |
         cordova create build com.example.myapp "我的App"
         cd build
         cp -r ../www .
     
-    # 7. 创建config.xml（无修改）
+    # 7. 创建config.xml
     - name: Create Config XML
       run: |
         cd build
-        
-        # 逐行创建config.xml，避免YAML解析问题
-        echo "<?xml version='1.0' encoding='utf-8'?>" > config.xml
-        echo "<widget id='com.example.myapp' version='1.0.0' xmlns='http://www.w3.org/ns/widgets'>" >> config.xml
-        echo "    <name>我的App</name>" >> config.xml
-        echo "    <description>一个HTML应用</description>" >> config.xml
-        echo "    <author email='you@example.com' href='https://example.com'>开发者</author>" >> config.xml
-        echo "" >> config.xml
-        echo "    <!-- 使用更兼容的配置 -->" >> config.xml
-        echo "    <preference name='loadUrlTimeoutValue' value='700000' />" >> config.xml
-        echo "    <preference name='android-minSdkVersion' value='21' />" >> config.xml
-        echo "    <preference name='android-targetSdkVersion' value='29' />" >> config.xml
-        echo "    <preference name='AndroidInsecureFileModeEnabled' value='true' />" >> config.xml
-        echo "" >> config.xml
-        echo "    <content src='index.html' />" >> config.xml
-        echo "    <access origin='*' />" >> config.xml
-        echo "    <allow-intent href='http://*/*' />" >> config.xml
-        echo "    <allow-intent href='https://*/*' />" >> config.xml
-        echo "    <allow-intent href='tel:*' />" >> config.xml
-        echo "    <allow-intent href='sms:*' />" >> config.xml
-        echo "    <allow-intent href='mailto:*' />" >> config.xml
-        echo "    <allow-intent href='geo:*' />" >> config.xml
-        echo "" >> config.xml
-        echo "    <platform name='android'>" >> config.xml
-        echo "        <allow-intent href='market:*' />" >> config.xml
-        echo "    </platform>" >> config.xml
-        echo "</widget>" >> config.xml
+        cat > config.xml << EOF
+<?xml version='1.0' encoding='utf-8'?>
+<widget id='com.example.myapp' version='1.0.0' xmlns='http://www.w3.org/ns/widgets'>
+    <name>我的App</name>
+    <description>一个HTML应用</description>
+    <author email='you@example.com' href='https://example.com'>开发者</author>
+
+    <!-- 兼容配置 -->
+    <preference name='loadUrlTimeoutValue' value='700000' />
+    <preference name='android-minSdkVersion' value='21' />
+    <preference name='android-targetSdkVersion' value='29' />
+    <preference name='AndroidInsecureFileModeEnabled' value='true' />
+
+    <content src='index.html' />
+    <access origin='*' />
+    <allow-intent href='http://*/*' />
+    <allow-intent href='https://*/*' />
+    <allow-intent href='tel:*' />
+    <allow-intent href='sms:*' />
+    <allow-intent href='mailto:*' />
+    <allow-intent href='geo:*' />
+
+    <platform name='android'>
+        <allow-intent href='market:*' />
+    </platform>
+</widget>
+EOF
     
-    # 8. 构建APK（补充--nofetch避免平台下载失败）
+    # 8. 构建APK
     - name: Build APK
       run: |
         cd build
-        # 手动安装cordova-android到项目，避免远程fetch失败
+        # 手动安装cordova-android避免下载失败
         npm install cordova-android@9.1.0 --save
-        echo "添加Android平台..."
         cordova platform add android@9.1.0 --nofetch
-        
-        echo "开始构建APK..."
+        # 构建debug APK
         cordova build android --debug
-        
         # 复制APK到根目录
         cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../myapp-debug.apk
-        
-        echo "APK构建完成！"
-        echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
-        echo "APK路径: ../myapp-debug.apk"
+        # 验证APK存在
+        ls -lh ../myapp-debug.apk
     
-    # 9. 上传构建产物（无修改）
+    # 9. 上传构建产物
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
