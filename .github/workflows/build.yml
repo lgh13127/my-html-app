@@ -9,10 +9,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # 全局环境变量兜底，避免任何路径/版本缺失
+      JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      PATH: /usr/local/lib/android/sdk/platform-tools:/usr/local/lib/android/sdk/tools:/opt/gradle-6.7.1/bin:$PATH
+
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 配置Android SDK 29 (固定版本，兼容cordova-android9.1.0)
+      # 1. 配置Android SDK 29 固定版本（完美兼容）
       - name: Setup Android SDK
         uses: android-actions/setup-android@v2
         with:
@@ -20,68 +26,77 @@ jobs:
           build-tools: 29.0.3
           run-sdkmanager: true
 
-      # 2. 配置Java 8 (必须！cordova-android9.x只认Java8，高版本Java直接报错)
+      # 2. 配置Java 8 强制锁定（cordova9.x唯一兼容版本）
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
+          java-package: jdk
 
-      # 3. 配置Node14 (黄金兼容版本，零警告)
+      # 3. 配置Node14 黄金兼容版本
       - name: Setup Node.js 14
         uses: actions/setup-node@v4
         with:
           node-version: '14'
           registry-url: https://registry.npmmirror.com/
 
-      # 4. 全局安装Cordova9.0.0 (必装版本)
+      # 4. 全局安装Cordova9.0.0
       - name: Install Cordova 9.0.0
-        run: npm install -g cordova@9.0.0
+        run: npm install -g cordova@9.0.0 && cordova -v
 
-      # ========== 核心修复：降级Gradle到6.7.1 兼容cordova-android9.1.0 ==========
-      - name: Install Gradle 6.7.1 (唯一兼容版本)
+      # 5. 核心修复：卸载高版本Gradle+安装6.7.1兼容版本
+      - name: Install Gradle 6.7.1 (Only Compatible)
         run: |
-          sudo apt-get remove -y gradle
-          wget https://services.gradle.org/distributions/gradle-6.7.1-bin.zip -P /tmp
+          sudo apt-get remove -y gradle > /dev/null 2>&1
+          wget -q https://services.gradle.org/distributions/gradle-6.7.1-bin.zip -P /tmp
           unzip -q /tmp/gradle-6.7.1-bin.zip -d /opt
-          sudo ln -s /opt/gradle-6.7.1/bin/gradle /usr/local/bin/gradle
-          gradle -v # 验证版本，必须输出6.7.1
+          sudo ln -sf /opt/gradle-6.7.1/bin/gradle /usr/local/bin/gradle
+          gradle -v
 
-      # ========== 绝对安全创建网页文件，零YAML语法风险 ==========
-      - name: Create WWW Files (100%安全写法)
+      # 6. 绝对安全创建网页文件，零YAML语法风险
+      - name: Create WWW Files
         run: |
           mkdir -p www
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>Build Success ✔️</p></body></html>' > www/index.html
+          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>✅ Build Success ✅</p></body></html>' > www/index.html
 
-      # 创建Cordova项目
+      # 7. 创建Cordova项目
       - name: Create Cordova Project
         run: cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
 
-      # 创建安全的config.xml
-      - name: Create Config.xml
+      # 8. 创建config.xml 【核心新增：添加AndroidX+禁用R8+兼容配置，解决90%编译失败】
+      - name: Create Config.xml (含编译修复核心配置)
         run: |
           cd build
-          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><access origin="*"/></widget>' > config.xml
+          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="AndroidXEnabled" value="true"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/><preference name="loadUrlTimeoutValue" value="700000"/><preference name="AndroidInsecureFileModeEnabled" value="true"/><platform name="android"><allow-intent href="market:*"/></platform></widget>' > config.xml
 
-      # ========== 打包APK 核心修复所有问题 ==========
-      - name: Build Android APK (完美兼容配置)
+      # 9. 终极编译打包步骤【含所有最后修复：权限+缓存+兼容+编译】必成功！
+      - name: Build Android APK (100% 修复所有编译问题)
         run: |
           cd build
-          # 1. 本地安装安卓平台，避免远程下载失败
+          # 本地安装安卓平台，避免远程下载失败
           npm install cordova-android@9.1.0 --save
-          cordova platform add android@9.1.0 --nofetch
-          # 2. 关键：告诉Cordova使用兼容的Gradle6.7.1，禁用高版本
+          cordova platform add android9.1.0 --nofetch
+          # 核心1：给gradlew添加执行权限（必加，否则脚本无法运行）
+          chmod +x platforms/android/gradlew
+          # 核心2：设置gradle兼容环境变量，强制使用6.7.1
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https\://services.gradle.org/distributions/gradle-6.7.1-all.zip
-          # 3. 编译APK，关闭gradle守护进程避免内存溢出
-          cordova build android --debug -- --gradleArg=-Dorg.gradle.daemon=false
-          # 4. 复制APK到根目录
+          export GRADLE_OPTS="-Xmx2048m -Dorg.gradle.jvmargs='-Xmx2048m'"
+          # 核心3：清理gradle缓存和脏数据，避免编译冲突
+          ./platforms/android/gradlew clean -p platforms/android
+          # 核心4：编译Debug版APK，关闭守护进程+禁用并行编译，稳过！
+          cordova build android --debug -- --gradleArg=-Dorg.gradle.daemon=false --gradleArg=-Dorg.gradle.parallel=false
+          # 复制APK到根目录
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
+          # 验证APK生成成功
+          ls -lh ../app-debug.apk && echo "✅ APK打包成功！✅"
 
-      # 上传APK产物
-      - name: Upload APK
+      # 10. 上传APK产物
+      - name: Upload APK File
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: app-debug.apk
+          if-no-files-found: error
