@@ -1,3 +1,19 @@
+# 打印npm全局包安装路径
+npm config get prefix
+# 列出npm全局安装的包
+npm list -g --depth=0
+# 检查PATH中是否包含npm全局路径
+echo $PATH | tr ':' '\n' | grep -i "npm"
+```{insert\_element\_0\_}### 问题核心原因
+`cordova: command not found` 本质是 **Cordova 未被正确安装到 Runner 的环境 PATH 中**，具体诱因：
+1. `sudo npm install -g cordova` 会将 Cordova 安装到系统级目录（如 `/usr/local/bin`），但 GitHub Actions 的 Ubuntu 24.04 环境中该目录的权限/路径映射异常；
+2. 原 `nodesource` 安装 Node 18.x 的方式，在 Ubuntu 24.04 下仍存在隐性的路径配置问题；
+3. 缺少对 Cordova 安装后的验证步骤，无法提前发现安装失败。
+
+### 修复后的完整 `build.yml`
+核心修改 `Step 4（Setup Node.js and Cordova）`，并补充路径校验：
+
+```yaml
 name: Build Android APK
 
 on:
@@ -30,27 +46,32 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
     
-    # 4. 安装Node.js（改用nvm，兼容Ubuntu 24.04）和Cordova
+    # 4. 安装Node.js和Cordova（核心修复：改用nvm，避免路径问题）
     - name: Setup Node.js and Cordova
       run: |
-        # 安装nvm（Node版本管理器）
+        # 安装nvm（Node版本管理器，跨系统兼容）
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-        # 加载nvm环境
+        # 加载nvm到当前shell
         export NVM_DIR="$HOME/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-        # 安装Node.js 14.x（兼容Cordova 9.x，且nvm支持Ubuntu 24.04）
-        nvm install 14
-        nvm use 14
-        # 切换npm淘宝源，解决依赖下载问题
+        # 安装Node 16.x（兼容Cordova 9.x，且nvm自动配置PATH）
+        nvm install 16
+        nvm use 16
+        # 验证Node/npm路径（关键：确保nvm的Node生效）
+        echo "Node路径: $(which node)"
+        echo "npm路径: $(which npm)"
+        # 切换npm镜像源，加速依赖下载
         npm config set registry https://registry.npmmirror.com/
-        # 全局安装Cordova 9.0.0
+        # 全局安装Cordova 9.0.0（不用sudo，nvm环境下安装到用户目录，PATH自动识别）
         npm install -g cordova@9.0.0
-        # 验证版本
-        node -v
-        npm -v
-        cordova -v
+        # 验证Cordova安装（关键：提前发现安装失败）
+        echo "Cordova路径: $(which cordova)"
+        cordova -v || { echo "Cordova安装失败！"; exit 1; }
+        # 打印环境信息，便于调试
+        echo "NODE_PATH: $NODE_PATH"
+        echo "PATH: $PATH"
     
-    # 5. 创建必要的资源文件（保持不变）
+    # 5. 创建必要的资源文件（无修改）
     - name: Create Resources
       run: |
         mkdir -p www
@@ -82,14 +103,14 @@ jobs:
         
         echo "资源文件创建完成"
     
-    # 6. 创建Cordova项目（保持不变）
+    # 6. 创建Cordova项目（无修改）
     - name: Create Cordova Project
       run: |
         cordova create build com.example.myapp "我的App"
         cd build
         cp -r ../www .
     
-    # 7. 创建config.xml（保持不变）
+    # 7. 创建config.xml（无修改）
     - name: Create Config XML
       run: |
         cd build
@@ -121,14 +142,13 @@ jobs:
         echo "    </platform>" >> config.xml
         echo "</widget>" >> config.xml
     
-    # 8. 构建APK（核心修改：手动安装cordova-android+--nofetch）
+    # 8. 构建APK（补充--nofetch避免平台下载失败）
     - name: Build APK
       run: |
         cd build
-        # 手动安装cordova-android@9.1.0到项目依赖（避免远程fetch失败）
+        # 手动安装cordova-android到项目，避免远程fetch失败
         npm install cordova-android@9.1.0 --save
         echo "添加Android平台..."
-        # 从本地依赖加载平台，跳过远程fetch
         cordova platform add android@9.1.0 --nofetch
         
         echo "开始构建APK..."
@@ -141,7 +161,7 @@ jobs:
         echo "文件大小: $(du -h ../myapp-debug.apk | cut -f1)"
         echo "APK路径: ../myapp-debug.apk"
     
-    # 9. 上传构建产物（保持不变）
+    # 9. 上传构建产物（无修改）
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
