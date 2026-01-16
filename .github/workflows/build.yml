@@ -1,5 +1,4 @@
 name: Build Android APK
-
 on:
   push:
     branches: [main, master]
@@ -20,7 +19,7 @@ jobs:
           build-tools: 29.0.3
           run-sdkmanager: true
 
-      - name: Setup Java 8
+      - name: Setup Java 8 (必须)
         uses: actions/setup-java@v4
         with:
           java-version: '8'
@@ -35,46 +34,27 @@ jobs:
       - name: Install Cordova 9.0.0
         run: npm install -g cordova@9.0.0
 
-      - name: Create WWW Assets (根治第49行语法错误核心)
+      # ✅ 核心根治：纯单行echo创建所有文件，无任何YAML语法风险
+      - name: Create WWW Files (绝对安全写法)
         run: |
           mkdir -p www
+          # 创建透明图标
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-          # ========== 核心修复：EOF规则 + 无缩进HTML ==========
-          cat > www/index.html <<'EOF'
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>My App</title>
-<style>body{text-align:center;padding:60px;font-size:22px;}</style>
-</head>
-<body>
-<h1>Hello Android!</h1>
-<p>Success Build ✔️</p>
-</body>
-</html>
-EOF
+          # 单行echo创建index.html 👉 100%规避所有特殊字符解析错误
+          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>Build Success ✔️</p></body></html>' > www/index.html
 
       - name: Create Cordova Project
         run: cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
 
-      - name: Create Config.xml
+      # ✅ 单行echo创建config.xml 同样绝对安全
+      - name: Create Config.xml (绝对安全写法)
         run: |
           cd build
-          cat > config.xml <<'EOF'
-<?xml version='1.0' encoding='utf-8'?>
-<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
-<name>MyApp</name>
-<content src="index.html"/>
-<preference name="android-minSdkVersion" value="21"/>
-<preference name="android-targetSdkVersion" value="29"/>
-<access origin="*"/>
-</widget>
-EOF
+          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><access origin="*"/></widget>' > config.xml
 
-      - name: Build APK (解决下载失败)
+      # ✅ 打包APK 解决所有下载/兼容问题
+      - name: Build Android APK
         run: |
           cd build
           npm install cordova-android@9.1.0 --save
@@ -82,7 +62,8 @@ EOF
           cordova build android --debug
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
 
-      - name: Upload APK File
+      # ✅ 上传APK产物
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
