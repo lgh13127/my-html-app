@@ -28,7 +28,28 @@ jobs:
           sudo apt-get install -y p7zip-full unzip tar curl wget zip build-essential gcc-multilib lib32z1 lib32stdc++6 openjdk-8-jdk --no-install-recommends -qq
           echo "✅ Dependencies Installed & Old Gradle Removed ✅"
 
-      # ========== 2. 安装Node14.21.3+NPM6 二进制版 + PATH配置 ==========
+      # ========== 2. ✅✅✅【终极必杀技1 - 全局Gradle配置，最高优先级】创建 ~/.gradle/init.gradle 强制所有构建用mavenCentral ==========
+      - name: Create Global Gradle Init Script (HIGHEST PRIORITY)
+        run: |
+          mkdir -p ~/.gradle
+          echo "allprojects {" > ~/.gradle/init.gradle
+          echo "    repositories {" >> ~/.gradle/init.gradle
+          echo "        mavenCentral()" >> ~/.gradle/init.gradle
+          echo "        maven { url 'https://maven.aliyun.com/repository/public' }" >> ~/.gradle/init.gradle
+          echo "        maven { url 'https://maven.aliyun.com/repository/google' }" >> ~/.gradle/init.gradle
+          echo "    }" >> ~/.gradle/init.gradle
+          echo "}" >> ~/.gradle/init.gradle
+          echo "buildscript {" >> ~/.gradle/init.gradle
+          echo "    repositories {" >> ~/.gradle/init.gradle
+          echo "        mavenCentral()" >> ~/.gradle/init.gradle
+          echo "        maven { url 'https://maven.aliyun.com/repository/public' }" >> ~/.gradle/init.gradle
+          echo "        maven { url 'https://maven.aliyun.com/repository/google' }" >> ~/.gradle/init.gradle
+          echo "    }" >> ~/.gradle/init.gradle
+          echo "}" >> ~/.gradle/init.gradle
+          cat ~/.gradle/init.gradle
+          echo "✅ Global Gradle Init Script Created Successfully ✅"
+
+      # ========== 3. 安装Node14.21.3+NPM6 二进制版 + PATH配置 ==========
       - name: Install Node.js14 + NPM6
         run: |
           wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
@@ -42,7 +63,7 @@ jobs:
           npm config set registry https://registry.npmmirror.com/
           echo "✅ Node14+NPM6 Installed ✅"
 
-      # ========== 3. 安装Cordova9.0.0 全局版 ==========
+      # ========== 4. 安装Cordova9.0.0 全局版 ==========
       - name: Install Cordova9.0.0
         run: |
           NODE_HOME=/usr/local/node-v14.21.3-linux-x64
@@ -51,7 +72,7 @@ jobs:
           cordova -v
           echo "✅ Cordova9.0.0 Installed ✅"
 
-      # ========== 4. 安装Android SDK 29 ==========
+      # ========== 5. 安装Android SDK 29 ==========
       - name: Install Android SDK 29
         run: |
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
@@ -63,14 +84,14 @@ jobs:
           sudo chmod -R +x $ANDROID_HOME/build-tools/29.0.3/
           echo "✅ Android SDK 29 Installed ✅"
 
-      # ========== 5. 配置Java 8 ==========
+      # ========== 6. 配置Java 8 ==========
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      # ========== ✅ 必加核心步骤：安装系统级Gradle5.6.4 ==========
+      # ========== 7. 必加核心步骤：安装系统级Gradle5.6.4 ==========
       - name: Install Gradle 5.6.4 (SYSTEM LEVEL - MUST HAVE)
         run: |
           wget -q https://services.gradle.org/distributions/gradle-5.6.4-bin.zip
@@ -83,7 +104,7 @@ jobs:
           gradle -v
           echo "✅ Gradle 5.6.4 Installed Successfully ✅"
 
-      # ========== 6. 创建项目和网页文件 ==========
+      # ========== 8. 创建项目和网页文件 ==========
       - name: Create Project & WWW Files
         run: |
           mkdir -p www
@@ -92,54 +113,46 @@ jobs:
           echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>My App</title><style>body{text-align:center;padding:60px;font-size:24px;}</style></head><body><h1>Hello Android!</h1><p>✅ APK BUILD SUCCESS ✅</p></body></html>' > www/index.html
           cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
 
-      # ========== 7. 创建config.xml ==========
+      # ========== 9. 创建config.xml ==========
       - name: Create Config.xml
         run: |
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
 
-      # ========== 🔥🔥🔥 打包核心步骤 - 终极绝杀修复【顺序+仓库】 最后一次 必成功 ==========
-      - name: Build Android APK (FINAL ULTIMATE FIX - 100% SUCCESS)
+      # ========== 🔥🔥🔥 打包核心步骤 - 终极必杀修复 最后一次 必成功 ==========
+      - name: Build Android APK (ULTIMATE FINAL FIX - 100% SUCCESS)
         run: |
           cd build
           export NODE_NO_WARNINGS=1
           cordova platform rm android || true
           npm install cordova-android@9.1.0 --save --silent
-          
-          # ✅ 步骤1: 添加Android平台
           cordova platform add android@9.1.0
 
-          # ✅✅✅ 【核心修复1 - 时机为王】立刻替换仓库源，删除Jcenter，置顶MavenCentral，一步到位！
-          # 根目录build.gradle - 彻底删除jcenter，置顶MavenCentral+阿里云镜像，只保留有效仓库
-          sed -i '/buildscript {/a \ \ \ \ repositories {\n        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n    }' platforms/android/build.gradle
-          sed -i '/jcenter()/d' platforms/android/build.gradle
-          sed -i '/google()/d' platforms/android/build.gradle
-          # app目录build.gradle - 同样处理
+          # ✅✅✅【终极必杀技2 - 精准修改buildscript仓库】只改classpath依赖的仓库，一针见血
+          sed -i 's/buildscript {/buildscript {\n    repositories {\n        mavenCentral()\n        maven { url "https:\/\/maven.aliyun.com\/repository/public" }\n        maven { url "https:\/\/maven.aliyun.com\/repository/google" }\n    }/g' platforms/android/app/build.gradle
           sed -i '/jcenter()/d' platforms/android/app/build.gradle
           sed -i '/google()/d' platforms/android/app/build.gradle
-          sed -i '/repositories {/a \        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' platforms/android/app/build.gradle
 
-          # ✅ 步骤2: 目录权限拉满
+          # ✅ 目录权限拉满
           sudo chmod -R 777 platforms/android/ || true
 
-          # ✅ 步骤3: 写入阿里云镜像配置，无重复任务
+          # ✅ 写入阿里云镜像配置
           echo "buildscript {" > platforms/android/wrapper.gradle
           echo "    repositories {" >> platforms/android/wrapper.gradle
           echo "        mavenCentral()" >> platforms/android/wrapper.gradle
           echo "        maven { url 'https://maven.aliyun.com/repository/public' }" >> platforms/android/wrapper.gradle
-          echo "        maven { url 'https://maven.aliyun.com/repository/google' }" >> platforms/android/wrapper.gradle
           echo "    }" >> platforms/android/wrapper.gradle
           echo "}" >> platforms/android/wrapper.gradle
 
-          # ✅ 步骤4: 手动执行gradle wrapper，生成gradlew文件，无冲突
+          # ✅ 手动执行gradle wrapper
           cd platforms/android/
           gradle wrapper --no-daemon
           cd ../..
 
-          # ✅ 步骤5: gradlew已生成，赋权
+          # ✅ 赋权gradlew
           sudo chmod +x platforms/android/gradlew || true
 
-          # ✅ 步骤6: 锁定gradle版本配置
+          # ✅ 锁定gradle版本
           mkdir -p platforms/android/gradle/wrapper
           echo "distributionUrl=https://services.gradle.org/distributions/gradle-5.6.4-all.zip" > platforms/android/gradle/wrapper/gradle-wrapper.properties
           echo "distributionBase=GRADLE_USER_HOME" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
@@ -147,22 +160,21 @@ jobs:
           echo "zipStoreBase=GRADLE_USER_HOME" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
           echo "zipStorePath=wrapper/dists" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
 
-          # ✅ 步骤7: 核心配置 - 禁用AndroidX + 下载超时容错
+          # ✅ 核心配置：禁用AndroidX + 超时容错
           echo "android.useAndroidX=false" > platforms/android/gradle.properties
           echo "android.enableJetifier=false" >> platforms/android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> platforms/android/gradle.properties
-          echo "org.gradle.connection.timeout=300000" >> platforms/android/gradle.properties
           echo "org.gradle.daemon=false" >> platforms/android/gradle.properties
 
-          # ✅ 步骤8: gradle环境变量配置
+          # ✅ 环境变量配置
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-5.6.4-all.zip
           export GRADLE_USER_HOME=/home/runner/.gradle
           export GRADLE_OPTS="-Xmx2048m -XX:MaxPermSize=512m -Dorg.gradle.daemon=false -Djava.home=$JAVA_HOME"
 
-          # ✅ 步骤9: 清理缓存，无脏数据
+          # ✅ 清理缓存
           sudo rm -rf ~/.gradle/caches/ || true
 
-          # ✅✅✅ 终极编译：无任何干扰，必成功！
+          # ✅✅✅ 终极编译 必成功！
           cordova clean android --silent
           cordova build android --debug --no-telemetry --gradle-no-daemon -x lint
 
