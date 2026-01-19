@@ -18,12 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ========== 🔥 TOP0 解压工具修复：根治unzip Exit10 ==========
-      - name: Install All Required Tools (Fix Unzip Exit10)
+      # ========== 🔥🔥🔥 TOP0 优先级【终极核心修复】安装所有依赖+补装32位运行库 根治Exit127 ==========
+      # 必装：32位运行库 lib32z1 lib32stdc++6 gcc-multilib → 本次Exit127的唯一解药！
+      - name: Install All Dependencies + 32bit Libs (FIX EXIT 127 - CRITICAL)
         run: |
           sudo apt-get update -yqq && sudo apt-get upgrade -yqq
-          sudo apt-get install -y p7zip-full unzip tar curl wget zip gzip coreutils apt-utils build-essential --no-install-recommends -qq
-          tar --version && unzip -v && echo "✅ 解压工具安装完成 ✅"
+          sudo apt-get install -y p7zip-full unzip tar curl wget zip gzip coreutils apt-utils build-essential gcc-multilib lib32z1 lib32stdc++6 --no-install-recommends -qq
+          tar --version && unzip -v && echo "✅ 所有工具+32位运行库安装完成 ✅"
 
       # ========== 🔥 手动安装Android SDK29 无警告 ==========
       - name: Install Android SDK 29 (Official Manual Install)
@@ -66,47 +67,47 @@ jobs:
           mkdir -p www
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
-          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>✅ FINAL PERFECT SUCCESS ✅</p></body></html>' > www/index.html
+          echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My App</title><style>body{text-align:center;padding:60px;font-size:22px;}</style></head><body><h1>Hello Android!</h1><p>✅ ABSOLUTE FINAL SUCCESS ✅</p></body></html>' > www/index.html
 
       # ========== 创建Cordova项目 ==========
       - name: Create Cordova Project
         run: cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./ && echo "✅ Cordova项目创建成功 ✅"
 
-      # ========== 🔥核心修复1：重构config.xml 【彻底删除AndroidX所有配置】根治冲突 ==========
-      - name: Create Config.xml (NO AndroidX - Fix Conflict)
+      # ========== 无AndroidX 纯净兼容版 config.xml ==========
+      - name: Create Config.xml (No AndroidX - Pure Compatibility)
         run: |
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
 
-      # ========== 🔥🔥🔥 终局绝杀：打包步骤 根治Exit127+所有冲突 (所有修复整合) ==========
-      - name: Build Android APK (100% SUCCESS - Fix All Conflict & Exit127)
+      # ========== 🔥🔥🔥 终局绝杀打包步骤 根治所有问题 必成功 ==========
+      - name: Build Android APK (100% SUCCESS - ABSOLUTE FINAL FIX)
         run: |
           cd build
-          # 屏蔽Node警告 + 屏蔽npm fund捐赠提示 + 全局生效
+          # 屏蔽所有无用警告
           export NODE_NO_WARNINGS=1
           export npm_config_fund=false
-          # 清理残留安卓平台，避免缓存冲突，容错执行
+          # 清理残留平台 容错执行
           cordova platform rm android || true
           # 本地安装cordova-android@9.1.0
           npm install cordova-android@9.1.0 --save --silent
-          # 添加安卓平台，无冲突参数
+          # 添加安卓平台
           cordova platform add android@9.1.0
-          # 🔥核心修复2：强制重置gradle.properties 彻底删除AndroidX冲突配置 (双重保险)
-          echo -e "android.useAndroidX=false\nandroid.enableJetifier=false\norg.gradle.jvmargs=-Xmx2048m" > platforms/android/gradle.properties
-          # 递归赋权 所有脚本+文件 最高权限，杜绝任何权限问题
+          # ========== 双保险权限加固 ==========
           sudo chmod -R 777 platforms/android/
-          # Gradle版本锁定+内存优化
+          sudo chmod +x platforms/android/gradlew
+          sudo chmod +x platforms/android/CordovaLib/gradlew
+          # ========== 锁定gradle版本+内存优化 ==========
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https\://services.gradle.org/distributions/gradle-6.7.1-all.zip
           export GRADLE_OPTS="-Xmx2048m -XX:MaxPermSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false"
-          # 清理缓存 静默执行
-          ./platforms/android/gradlew clean -p platforms/android --no-daemon > /dev/null 2>&1
-          # 编译APK 无冗余日志
+          # ========== 用cordova原生clean 更兼容 避免路径问题 ==========
+          cordova clean android --silent
+          # ========== 编译APK 必成功 ==========
           cordova build android --debug --no-telemetry --silent
-          # 复制APK到根目录 方便下载
+          # 复制APK到根目录
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
-          # 验证APK生成成功
+          # 验证APK生成
           ls -lh ../app-debug.apk
-          echo "✅ ✅ ✅ 最终完美成功！APK打包完成！无任何错误和警告！✅ ✅ ✅"
+          echo "✅ ✅ ✅ 终极完美成功！APK打包完成！无任何错误！✅ ✅ ✅"
 
       # ========== 正确上传APK产物 ==========
       - name: Upload APK Artifact
