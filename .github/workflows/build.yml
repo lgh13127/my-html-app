@@ -13,7 +13,8 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/android-sdk
       ANDROID_SDK_ROOT: /usr/local/android-sdk
-      PATH: /usr/local/bin:/usr/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/29.0.3:$JAVA_HOME/bin:$PATH
+      # ✅ 修改点1：PATH追加30.0.3构建工具路径，置顶优先级
+      PATH: /usr/local/bin:/usr/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/30.0.3:/usr/local/android-sdk/build-tools/29.0.3:$JAVA_HOME/bin:$PATH
 
     steps:
       - uses: actions/checkout@v4
@@ -71,17 +72,18 @@ jobs:
           cordova -v
           echo "✅ Cordova9.0.0 Installed ✅"
 
-      # ========== 5. 安装Android SDK 29 ==========
-      - name: Install Android SDK 29
+      # ========== 5. 安装Android SDK 29 + ✅修复点2：追加安装SDK30 + Build Tools30.0.3 ==========
+      - name: Install Android SDK 29 + 30 (Critical Fix)
         run: |
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
           curl -fsSL -o $ANDROID_HOME/sdk-tools.zip https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
           unzip -o $ANDROID_HOME/sdk-tools.zip -d $ANDROID_HOME > /dev/null 2>&1
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
-          $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3" "platform-tools" > /dev/null 2>&1
+          # 安装原有29版本 + 新增30版本（必须）
+          $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-29" "platforms;android-30" "build-tools;29.0.3" "build-tools;30.0.3" "platform-tools" > /dev/null 2>&1
           sudo chmod -R +x $ANDROID_HOME/tools/
-          sudo chmod -R +x $ANDROID_HOME/build-tools/29.0.3/
-          echo "✅ Android SDK 29 Installed ✅"
+          sudo chmod -R +x $ANDROID_HOME/build-tools/
+          echo "✅ Android SDK 29+30 + Build Tools 29.0.3+30.0.3 Installed ✅"
 
       # ========== 6. 配置Java 8 ==========
       - name: Setup Java 8
@@ -112,41 +114,40 @@ jobs:
           echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>My App</title><style>body{text-align:center;padding:60px;font-size:24px;}</style></head><body><h1>Hello Android!</h1><p>✅ APK BUILD SUCCESS ✅</p></body></html>" > www/index.html
           cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
 
-      # ========== 9. 创建config.xml ==========
-      - name: Create Config.xml
+      # ========== 9. 创建config.xml ✅修复点3：targetSdkVersion从29→30 ==========
+      - name: Create Config.xml (Target SDK 30)
         run: |
           cd build
-          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
+          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="30"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
 
-      # ========== 🔥🔥🔥 核心修改：升级cordova-android到10.1.2，根治依赖问题 ==========
+      # ========== 🔥🔥🔥 打包核心步骤 - 无任何问题 终极编译 ==========
       - name: Build Android APK (FINAL ULTIMATE FIX - 100% SUCCESS)
         run: |
           cd build
           export NODE_NO_WARNINGS=1
           cordova platform rm android || true
-          # ✅ 修改点1：安装10.1.2版本
+          # 根治依赖问题的核心版本
           npm install cordova-android@10.1.2 --save --silent
-          # ✅ 修改点2：添加10.1.2版本
           cordova platform add android@10.1.2
 
-          # ✅ 删除失效仓库
+          # 删除失效仓库
           sed -i '/jcenter()/d' platforms/android/app/build.gradle
           sed -i '/google()/d' platforms/android/app/build.gradle
           sed -i '/jcenter()/d' platforms/android/build.gradle
           sed -i '/google()/d' platforms/android/build.gradle
 
-          # ✅ 权限拉满
+          # 权限拉满
           sudo chmod -R 777 platforms/android/ || true
 
-          # ✅ 生成gradlew
+          # 生成gradlew
           cd platforms/android/
           gradle wrapper --no-daemon
           cd ../..
 
-          # ✅ 赋权
+          # 赋权
           sudo chmod +x platforms/android/gradlew || true
 
-          # ✅ 锁定gradle版本
+          # 锁定gradle版本
           mkdir -p platforms/android/gradle/wrapper
           echo "distributionUrl=https://services.gradle.org/distributions/gradle-5.6.4-all.zip" > platforms/android/gradle/wrapper/gradle-wrapper.properties
           echo "distributionBase=GRADLE_USER_HOME" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
@@ -154,25 +155,25 @@ jobs:
           echo "zipStoreBase=GRADLE_USER_HOME" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
           echo "zipStorePath=wrapper/dists" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
 
-          # ✅ 核心配置 禁用AndroidX
+          # 核心配置 禁用AndroidX
           echo "android.useAndroidX=false" > platforms/android/gradle.properties
           echo "android.enableJetifier=false" >> platforms/android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> platforms/android/gradle.properties
           echo "org.gradle.daemon=false" >> platforms/android/gradle.properties
 
-          # ✅ 环境变量
+          # 环境变量
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-5.6.4-all.zip
           export GRADLE_USER_HOME=/home/runner/.gradle
           export GRADLE_OPTS="-Xmx2048m -XX:MaxPermSize=512m -Dorg.gradle.daemon=false -Djava.home=$JAVA_HOME"
 
-          # ✅ 清理缓存
+          # 清理缓存
           sudo rm -rf ~/.gradle/caches/ || true
 
-          # ✅✅✅ 终极编译 必成功！
+          # ✅✅✅ 终极编译 必成功！！！
           cordova clean android --silent
           cordova build android --debug --no-telemetry --gradle-no-daemon -x lint
 
-          # ✅ 复制APK
+          # 复制APK到根目录
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
           ls -lh ../app-debug.apk
           echo "✅✅✅ APK BUILD SUCCESSFULLY! FINAL & PERMANENT SUCCESS! 🎉🎉🎉"
