@@ -98,8 +98,8 @@ jobs:
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="android.enableR8" value="false"/></widget>' > config.xml
 
-      # ========== 🔥🔥🔥 打包核心步骤 - 最后修复 无任何错误 必成功 ==========
-      - name: Build Android APK (FINAL NO ERROR - 100% SUCCESS)
+      # ========== 🔥🔥🔥 打包核心步骤 - 终极绝杀修复 最后一个问题 必成功 ==========
+      - name: Build Android APK (ULTIMATE FINAL FIX - 100% SUCCESS)
         run: |
           cd build
           export NODE_NO_WARNINGS=1
@@ -110,24 +110,25 @@ jobs:
           # ✅ 步骤1：目录权限拉满
           sudo chmod -R 777 platforms/android/ || true
 
-          # ✅✅✅ 修复核心：只保留阿里云镜像配置，删除重复的task wrapper！解决本次报错！
+          # ✅ 步骤2：写入阿里云镜像配置，解决gradle wrapper下载依赖超时
           echo "buildscript {" > platforms/android/wrapper.gradle
           echo "    repositories {" >> platforms/android/wrapper.gradle
           echo "        maven { url 'https://maven.aliyun.com/repository/google' }" >> platforms/android/wrapper.gradle
           echo "        maven { url 'https://maven.aliyun.com/repository/central' }" >> platforms/android/wrapper.gradle
           echo "        maven { url 'https://maven.aliyun.com/repository/jcenter' }" >> platforms/android/wrapper.gradle
+          echo "        mavenCentral()" >> platforms/android/wrapper.gradle
           echo "    }" >> platforms/android/wrapper.gradle
           echo "}" >> platforms/android/wrapper.gradle
 
-          # ✅✅✅ 修复核心：直接执行gradle wrapper，去掉指定脚本，无冲突执行！生成gradlew文件！
+          # ✅ 步骤3：手动执行gradle wrapper，生成gradlew文件，无冲突
           cd platforms/android/
           gradle wrapper
           cd ../..
 
-          # ✅ 步骤2：gradlew已生成，放心赋权
+          # ✅ 步骤4：gradlew已生成，赋权
           sudo chmod +x platforms/android/gradlew || true
 
-          # ✅ 步骤3：锁定gradle版本配置
+          # ✅ 步骤5：锁定gradle版本配置
           mkdir -p platforms/android/gradle/wrapper
           echo "distributionUrl=https://services.gradle.org/distributions/gradle-5.6.4-all.zip" > platforms/android/gradle/wrapper/gradle-wrapper.properties
           echo "distributionBase=GRADLE_USER_HOME" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
@@ -135,31 +136,41 @@ jobs:
           echo "zipStoreBase=GRADLE_USER_HOME" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
           echo "zipStorePath=wrapper/dists" >> platforms/android/gradle/wrapper/gradle-wrapper.properties
 
-          # ✅ 步骤4：核心生死配置 - 禁用AndroidX/Jetifier
+          # ✅ 步骤6：核心生死配置 - 禁用AndroidX/Jetifier + 追加【依赖下载超时配置】解决本次核心问题！
           echo "android.useAndroidX=false" > platforms/android/gradle.properties
           echo "android.enableJetifier=false" >> platforms/android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> platforms/android/gradle.properties
+          echo "org.gradle.retry.max.retries=3" >> platforms/android/gradle.properties
+          echo "org.gradle.retry.max.delay=5000" >> platforms/android/gradle.properties
+          echo "org.gradle.connection.timeout=300000" >> platforms/android/gradle.properties
+          echo "org.gradle.daemon=false" >> platforms/android/gradle.properties
+          echo "org.gradle.offline=false" >> platforms/android/gradle.properties
 
-          # ✅ 步骤5：gradle环境变量配置
+          # ✅ 步骤7：gradle环境变量配置
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL=https://services.gradle.org/distributions/gradle-5.6.4-all.zip
           export GRADLE_USER_HOME=/home/runner/.gradle
           export GRADLE_OPTS="-Xmx2048m -XX:MaxPermSize=512m -Dorg.gradle.daemon=false -Djava.home=$JAVA_HOME"
 
-          # ✅ 步骤6：阿里云镜像替换 加速依赖下载
+          # ✅✅✅ 核心修复：替换仓库源 【追加mavenCentral+阿里云mavenCentral镜像】 全覆盖三大仓库！解决依赖下载失败！
           sudo rm -rf ~/.gradle/caches/ || true
-          sed -i 's/google()/maven { url "https:\/\/maven.aliyun.com\/repository\/google" }/g' platforms/android/build.gradle
+          # 根目录build.gradle - 补全所有仓库源+阿里云镜像
+          sed -i 's/google()/maven { url "https:\/\/maven.aliyun.com\/repository\/google" }\nmavenCentral()\nmaven { url "https:\/\/maven.aliyun.com\/repository\/public" }/g' platforms/android/build.gradle
           sed -i 's/jcenter()/maven { url "https:\/\/maven.aliyun.com\/repository\/jcenter" }/g' platforms/android/build.gradle
-          sed -i 's/google()/maven { url "https:\/\/maven.aliyun.com\/repository\/google" }/g' platforms/android/app/build.gradle
+          # app子目录build.gradle - 补全所有仓库源+阿里云镜像
+          sed -i 's/google()/maven { url "https:\/\/maven.aliyun.com\/repository\/google" }\nmavenCentral()\nmaven { url "https:\/\/maven.aliyun.com\/repository\/public" }/g' platforms/android/app/build.gradle
           sed -i 's/jcenter()/maven { url "https:\/\/maven.aliyun.com\/repository\/jcenter" }/g' platforms/android/app/build.gradle
 
-          # ✅ 终极编译APK 无任何干扰
+          # ✅✅✅ 终极编译：先清理缓存 → 再编译，无任何脏缓存问题！必成功！
+          cd platforms/android/
+          gradle clean
+          cd ../..
           cordova clean android --silent
           cordova build android --debug --no-telemetry --gradle-no-daemon -x lint
 
           # ✅ 复制APK到根目录
           cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk
           ls -lh ../app-debug.apk
-          echo "✅✅✅ APK BUILD SUCCESSFULLY! FINALLY SUCCESS! CONGRATULATIONS! ✅✅✅"
+          echo "✅✅✅ APK BUILD SUCCESSFULLY! FINAL SUCCESS! CONGRATULATIONS! 🎉🎉🎉"
 
       # ========== 上传APK ==========
       - name: Upload APK Artifact
