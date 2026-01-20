@@ -60,68 +60,15 @@ jobs:
           # 添加Android平台
           cordova platform add android@9.1.0 --save
 
-      # 6. 创建Cordova Gradle Hook（核心：自动修复build.gradle）
+      # 6. 创建Cordova Gradle Hook（核心：自动修复build.gradle，单行生成避免YAML语法错误）
       - name: Create Cordova Build Hook
         run: |
           cd my-app
           # 创建hooks目录
           mkdir -p hooks/before_build
           
-          # 生成hook脚本：自动删除versioncompare依赖 + 禁用Jcenter
-          cat > hooks/before_build/fix_gradle.js << 'EOF'
-#!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
-
-// 定义build.gradle路径
-const rootGradlePath = path.join(__dirname, '../../platforms/android/build.gradle');
-const appGradlePath = path.join(__dirname, '../../platforms/android/app/build.gradle');
-const cordovaLibGradlePath = path.join(__dirname, '../../platforms/android/CordovaLib/build.gradle');
-
-// 修复函数：删除versioncompare依赖 + 替换仓库
-function fixGradleFile(filePath) {
-    if (!fs.existsSync(filePath)) {
-        console.log(`⚠️ ${filePath} 不存在，跳过`);
-        return;
-    }
-    
-    let content = fs.readFileSync(filePath, 'utf8');
-    
-    // 1. 删除com.g00fy2:versioncompare:1.3.4依赖行
-    content = content.replace(/classpath\s+["']com\.g00fy2:versioncompare:1\.3\.4["']/g, '');
-    content = content.replace(/\n\s*\n/g, '\n'); // 清理空行
-    
-    // 2. 禁用Jcenter + 替换为阿里云仓库
-    content = content.replace(/jcenter\(\)/g, 'jcenter { enabled = false }');
-    content = content.replace(/repositories\s*\{\s*/g, `repositories {
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://maven.aliyun.com/repository/google' }
-    `);
-    
-    // 写入修复后的内容
-    fs.writeFileSync(filePath, content, 'utf8');
-    console.log(`✅ 修复完成：${filePath}`);
-}
-
-// 执行修复
-fixGradleFile(rootGradlePath);
-fixGradleFile(appGradlePath);
-fixGradleFile(cordovaLibGradlePath);
-
-// 修复gradle.properties
-const gradlePropPath = path.join(__dirname, '../../platforms/android/gradle.properties');
-if (fs.existsSync(gradlePropPath)) {
-    let propContent = fs.readFileSync(gradlePropPath, 'utf8');
-    propContent += `
-android.useAndroidX=false
-enableJetifier=false
-org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m
-org.gradle.daemon=false
-`;
-    fs.writeFileSync(gradlePropPath, propContent, 'utf8');
-    console.log(`✅ 修复gradle.properties完成`);
-}
-EOF
+          # 生成hook脚本：单行字符串+\\n换行，避免YAML语法错误（核心修复）
+          echo '#!/usr/bin/env node\nconst fs = require("fs");\nconst path = require("path");\n\n// 定义build.gradle路径\nconst rootGradlePath = path.join(__dirname, "../../platforms/android/build.gradle");\nconst appGradlePath = path.join(__dirname, "../../platforms/android/app/build.gradle");\nconst cordovaLibGradlePath = path.join(__dirname, "../../platforms/android/CordovaLib/build.gradle");\n\n// 修复函数：删除versioncompare依赖 + 替换仓库\nfunction fixGradleFile(filePath) {\n    if (!fs.existsSync(filePath)) {\n        console.log(`⚠️ ${filePath} 不存在，跳过`);\n        return;\n    }\n    \n    let content = fs.readFileSync(filePath, "utf8");\n    \n    // 1. 删除com.g00fy2:versioncompare:1.3.4依赖行\n    content = content.replace(/classpath\\s+["\']com\\.g00fy2:versioncompare:1\\.3\\.4["\']/g, "");\n    content = content.replace(/\\n\\s*\\n/g, "\\n"); // 清理空行\n    \n    // 2. 禁用Jcenter + 替换为阿里云仓库\n    content = content.replace(/jcenter\\(\\)/g, "jcenter { enabled = false }");\n    content = content.replace(/repositories\\s*\\{\\s*/g, `repositories {\\n        maven { url \'https://maven.aliyun.com/repository/public\' }\\n        maven { url \'https://maven.aliyun.com/repository/google\' }\\n    `);\n    \n    // 写入修复后的内容\n    fs.writeFileSync(filePath, content, "utf8");\n    console.log(`✅ 修复完成：${filePath}`);\n}\n\n// 执行修复\nfixGradleFile(rootGradlePath);\nfixGradleFile(appGradlePath);\nfixGradleFile(cordovaLibGradlePath);\n\n// 修复gradle.properties\nconst gradlePropPath = path.join(__dirname, "../../platforms/android/gradle.properties");\nif (fs.existsSync(gradlePropPath)) {\n    let propContent = fs.readFileSync(gradlePropPath, "utf8");\n    propContent += `\nandroid.useAndroidX=false\nenableJetifier=false\norg.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m\norg.gradle.daemon=false\n`;\n    fs.writeFileSync(gradlePropPath, propContent, "utf8");\n    console.log(`✅ 修复gradle.properties完成`);\n}' > hooks/before_build/fix_gradle.js
           
           # 赋予hook脚本执行权限
           chmod +x hooks/before_build/fix_gradle.js
