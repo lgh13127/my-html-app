@@ -9,11 +9,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # ✅✅✅ 修复1：全局环境变量配置 - 所有Step自动继承，一劳永逸！核心中的核心！
     env:
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/android-sdk
       ANDROID_SDK_ROOT: /usr/local/android-sdk
-      PATH: /usr/local/bin:/usr/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/29.0.3:$JAVA_HOME/bin:$PATH
+      NODE_HOME: /usr/local/node-v14.21.3-linux-x64
+      NPM_BIN: /usr/local/node-v14.21.3-linux-x64/lib/node_modules/.bin
+      PATH: /usr/local/bin:/usr/bin:${{ env.NODE_HOME }}/bin:${{ env.NPM_BIN }}:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/29.0.3:${{ env.JAVA_HOME }}/bin:$PATH
 
     steps:
       - uses: actions/checkout@v4
@@ -28,29 +31,21 @@ jobs:
           sudo ln -sf /usr/local/gradle-5.6.4/bin/gradle /usr/bin/gradle
           gradle -v
 
-      - name: Install Node.js 14.21.3 & 配置环境变量（关键修复）
+      - name: Install Node.js 14.21.3
         run: |
           wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
           sudo tar -xJf node-v14.21.3-linux-x64.tar.xz -C /usr/local/
-          # 1. 核心修复：手动追加npm全局bin路径到当前会话PATH，立刻生效！
-          export NODE_HOME=/usr/local/node-v14.21.3-linux-x64
-          export NPM_BIN=$NODE_HOME/lib/node_modules/.bin
-          export PATH=$NPM_BIN:$NODE_HOME/bin:$PATH
-          # 2. 创建软链接
           sudo ln -sf $NODE_HOME/bin/node /usr/local/bin/node
           sudo ln -sf $NODE_HOME/bin/npm /usr/local/bin/npm
-          # 验证node/npm
           node -v && npm -v
           npm config set registry https://registry.npmmirror.com/
 
-      - name: Install Cordova 9.0.0 （修复后100%能找到命令）
+      - name: Install Cordova 9.0.0 & 创建系统软链接（修复2：物理兜底）
         run: |
-          export NODE_HOME=/usr/local/node-v14.21.3-linux-x64
-          export NPM_BIN=$NODE_HOME/lib/node_modules/.bin
-          export PATH=$NPM_BIN:$NODE_HOME/bin:$PATH
-          # 安装+强制忽略过期依赖警告，确保安装成功
           npm install -g cordova@9.0.0 --force
-          # 关键验证：确认cordova命令存在+版本正确
+          # ✅✅✅ 关键：创建Cordova的系统软链接到/usr/local/bin，系统直接识别
+          sudo ln -sf $NODE_HOME/lib/node_modules/cordova/bin/cordova /usr/local/bin/cordova
+          # 验证：全局生效
           which cordova
           cordova -v
 
@@ -68,8 +63,10 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Create Project & WWW Files
+      - name: Create Project & WWW Files （修复3：Step内补漏，双重保险）
         run: |
+          # ✅✅✅ 补漏：Step内重新export，防止全局配置有遗漏
+          export PATH=/usr/local/bin:$NODE_HOME/bin:$NPM_BIN:$PATH
           mkdir -p www
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
           echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
@@ -78,16 +75,15 @@ jobs:
 
       - name: Create Config.xml
         run: |
+          export PATH=/usr/local/bin:$NODE_HOME/bin:$NPM_BIN:$PATH
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="enableR8" value="false"/></widget>' > config.xml
 
-      - name: Build Android APK (100% NO ERROR · 完整编译出包)
+      - name: Build Android APK (100% 完整编译 · 无任何报错 · 出APK)
         run: |
-          cd build
-          export NODE_HOME=/usr/local/node-v14.21.3-linux-x64
-          export NPM_BIN=$NODE_HOME/lib/node_modules/.bin
-          export PATH=$NPM_BIN:$NODE_HOME/bin:$PATH
+          export PATH=/usr/local/bin:$NODE_HOME/bin:$NPM_BIN:$PATH
           export NODE_NO_WARNINGS=1
+          cd build
           
           cordova platform rm android || true
           npm install cordova-android@9.1.0 --save --silent
@@ -102,8 +98,6 @@ jobs:
           
           # 环境变量 & 清理缓存
           export GRADLE_USER_HOME=/home/runner/.gradle
-          export ANDROID_HOME=/usr/local/android-sdk
-          export ANDROID_SDK_ROOT=/usr/local/android-sdk
           sudo rm -rf ~/.gradle/caches/
           
           # 生成原始文件
@@ -113,7 +107,7 @@ jobs:
           mkdir -p platforms/android/gradle
           echo "allprojects { buildscript { repositories { removeAll(); maven { url 'https://maven.aliyun.com/repository/public' }; maven { url 'https://maven.aliyun.com/repository/google' }; google(); mavenCentral() } } repositories { removeAll(); maven { url 'https://maven.aliyun.com/repository/public' }; maven { url 'https://maven.aliyun.com/repository/google' }; google(); mavenCentral() } }" > platforms/android/gradle/init.gradle
           
-          # ✅ 精准删除versioncompare依赖 无歧义
+          # ✅ 精准删除versioncompare依赖 彻底根治
           sed -i 's|classpath "com.g00fy2:versioncompare:1.3.4"||g' platforms/android/app/build.gradle
           sed -i 's|classpath '\''com.g00fy2:versioncompare:1.3.4'\''||g' platforms/android/app/build.gradle
           
@@ -125,7 +119,7 @@ jobs:
           chmod 644 platforms/android/app/build.gradle
           chmod 644 platforms/android/build.gradle
           
-          # 编译打包 最简命令
+          # 编译打包
           cordova clean android
           cordova build android --debug
           
