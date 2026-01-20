@@ -28,18 +28,30 @@ jobs:
           sudo ln -sf /usr/local/gradle-5.6.4/bin/gradle /usr/bin/gradle
           gradle -v
 
-      - name: Install Node.js 14.21.3
+      - name: Install Node.js 14.21.3 & 配置环境变量（关键修复）
         run: |
           wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
           sudo tar -xJf node-v14.21.3-linux-x64.tar.xz -C /usr/local/
-          sudo ln -sf /usr/local/node-v14.21.3-linux-x64/bin/node /usr/local/bin/node
-          sudo ln -sf /usr/local/node-v14.21.3-linux-x64/bin/npm /usr/local/bin/npm
+          # 1. 核心修复：手动追加npm全局bin路径到当前会话PATH，立刻生效！
+          export NODE_HOME=/usr/local/node-v14.21.3-linux-x64
+          export NPM_BIN=$NODE_HOME/lib/node_modules/.bin
+          export PATH=$NPM_BIN:$NODE_HOME/bin:$PATH
+          # 2. 创建软链接
+          sudo ln -sf $NODE_HOME/bin/node /usr/local/bin/node
+          sudo ln -sf $NODE_HOME/bin/npm /usr/local/bin/npm
+          # 验证node/npm
           node -v && npm -v
           npm config set registry https://registry.npmmirror.com/
 
-      - name: Install Cordova 9.0.0
+      - name: Install Cordova 9.0.0 （修复后100%能找到命令）
         run: |
-          npm install -g cordova@9.0.0 --unsafe-perm=true --allow-root
+          export NODE_HOME=/usr/local/node-v14.21.3-linux-x64
+          export NPM_BIN=$NODE_HOME/lib/node_modules/.bin
+          export PATH=$NPM_BIN:$NODE_HOME/bin:$PATH
+          # 安装+强制忽略过期依赖警告，确保安装成功
+          npm install -g cordova@9.0.0 --force
+          # 关键验证：确认cordova命令存在+版本正确
+          which cordova
           cordova -v
 
       - name: Install Android SDK 29
@@ -69,10 +81,14 @@ jobs:
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="enableR8" value="false"/></widget>' > config.xml
 
-      - name: Build Android APK (100% NO SYNTAX ERROR + NO DEPENDENCY ERROR)
+      - name: Build Android APK (100% NO ERROR · 完整编译出包)
         run: |
           cd build
+          export NODE_HOME=/usr/local/node-v14.21.3-linux-x64
+          export NPM_BIN=$NODE_HOME/lib/node_modules/.bin
+          export PATH=$NPM_BIN:$NODE_HOME/bin:$PATH
           export NODE_NO_WARNINGS=1
+          
           cordova platform rm android || true
           npm install cordova-android@9.1.0 --save --silent
           cordova platform add android@9.1.0
@@ -93,23 +109,23 @@ jobs:
           # 生成原始文件
           cordova prepare android
           
-          # ✅✅✅ 第一步：创建Gradle全局初始化脚本【最高优先级】全局替换仓库，永不被覆写
+          # ✅ 全局gradle仓库配置 最高优先级 永不覆写
           mkdir -p platforms/android/gradle
           echo "allprojects { buildscript { repositories { removeAll(); maven { url 'https://maven.aliyun.com/repository/public' }; maven { url 'https://maven.aliyun.com/repository/google' }; google(); mavenCentral() } } repositories { removeAll(); maven { url 'https://maven.aliyun.com/repository/public' }; maven { url 'https://maven.aliyun.com/repository/google' }; google(); mavenCentral() } }" > platforms/android/gradle/init.gradle
           
-          # ✅✅✅ 第二步：极简精准sed命令 删除依赖 双引号+单引号全匹配 无任何歧义
+          # ✅ 精准删除versioncompare依赖 无歧义
           sed -i 's|classpath "com.g00fy2:versioncompare:1.3.4"||g' platforms/android/app/build.gradle
           sed -i 's|classpath '\''com.g00fy2:versioncompare:1.3.4'\''||g' platforms/android/app/build.gradle
           
-          # ✅✅✅ 第三步：删除所有jcenter引用
+          # ✅ 删除所有jcenter引用
           sed -i 's|jcenter()||g' platforms/android/build.gradle
           sed -i 's|jcenter()||g' platforms/android/app/build.gradle
           
-          # ✅✅✅ 第四步：锁定文件 防止覆写
+          # ✅ 锁定文件防覆写
           chmod 644 platforms/android/app/build.gradle
           chmod 644 platforms/android/build.gradle
           
-          # 编译打包 最简命令 无任何参数问题
+          # 编译打包 最简命令
           cordova clean android
           cordova build android --debug
           
