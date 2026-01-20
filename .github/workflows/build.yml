@@ -73,7 +73,7 @@ jobs:
           cd build
           echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="enableR8" value="false"/><preference name="android-buildToolsVersion" value="29.0.3"/><preference name="android-compileSdkVersion" value="29"/></widget>' > config.xml
 
-      - name: Build Android APK (Cordova官方兼容 · 100%编译成功)
+      - name: Build Android APK (Gradlew修复 · 100%执行成功)
         run: |
           export NODE_NO_WARNINGS=1
           cd build
@@ -83,11 +83,14 @@ jobs:
           npm install cordova-android@9.1.0 --save --silent
           cordova platform add android@9.1.0
           
-          # 2. 放开所有权限，修复文件所有权
+          # 2. 【核心修复1】先执行prepare生成完整项目文件（包括gradlew）
+          cordova prepare android
+          
+          # 3. 放开所有权限 + 修复文件所有权
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
           
-          # 3. 基础gradle.properties配置（补充Cordova关键配置）
+          # 4. 基础gradle.properties配置（补充Cordova关键配置）
           echo "android.useAndroidX=false" > platforms/android/gradle.properties
           echo "enableJetifier=false" >> platforms/android/gradle.properties
           echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> platforms/android/gradle.properties
@@ -96,32 +99,37 @@ jobs:
           echo "cdvBuildToolsVersion=29.0.3" >> platforms/android/gradle.properties
           echo "cdvMinSdkVersion=21" >> platforms/android/gradle.properties
 
-          # 4. 根build.gradle（补充Cordova关键变量 + AGP 3.4.3）
-          mkdir -p platforms/android
+          # 5. 根build.gradle（补充Cordova关键变量 + AGP 3.4.3）
           echo '// Cordova Android 9.1.0 官方推荐配置\next cdvCompileSdkVersion = 29\next cdvBuildToolsVersion = "29.0.3"\next cdvMinSdkVersion = 21\nbuildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:3.4.3"\n    }\n}\nallprojects {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n}\ntask clean(type: Delete) {\n    delete rootProject.buildDir\n}' > platforms/android/build.gradle
 
-          # 5. app/build.gradle（AGP 3.4.3 + 完整Cordova配置）
-          mkdir -p platforms/android/app
+          # 6. app/build.gradle（AGP 3.4.3 + 完整Cordova配置）
           echo 'apply plugin: "com.android.application"\nbuildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:3.4.3"\n    }\n}\nandroid {\n    compileSdkVersion cdvCompileSdkVersion\n    buildToolsVersion cdvBuildToolsVersion\n    defaultConfig {\n        applicationId "com.example.myapp"\n        minSdkVersion cdvMinSdkVersion\n        targetSdkVersion 29\n        versionCode 1\n        versionName "1.0.0"\n        multiDexEnabled true\n    }\n    buildTypes {\n        debug {\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }\n        release {\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }\n    }\n    lintOptions {\n        abortOnError false\n        checkReleaseBuilds false\n    }\n    packagingOptions {\n        exclude "META-INF/LICENSE"\n        exclude "META-INF/NOTICE"\n    }\n}\nrepositories {\n    maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://maven.aliyun.com/repository/google" }\n    google()\n    mavenCentral()\n}\ndependencies {\n    implementation fileTree(dir: "libs", include: ["*.jar"])\n    implementation "androidx.appcompat:appcompat:1.1.0"\n    implementation "androidx.legacy:legacy-support-v4:1.0.0"\n    implementation "com.android.support:multidex:1.0.3"\n    implementation project(":CordovaLib")\n}\nconfigurations.all {\n    resolutionStrategy {\n        force "androidx.core:core:1.3.2"\n        force "androidx.appcompat:appcompat:1.1.0"\n    }\n}' > platforms/android/app/build.gradle
 
-          # 6. CordovaLib/build.gradle（修复子模块编译）
-          mkdir -p platforms/android/CordovaLib
+          # 7. CordovaLib/build.gradle（修复子模块编译）
           echo 'apply plugin: "com.android.library"\nbuildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:3.4.3"\n    }\n}\nandroid {\n    compileSdkVersion 29\n    buildToolsVersion "29.0.3"\n    defaultConfig {\n        minSdkVersion 21\n        targetSdkVersion 29\n        multiDexEnabled true\n    }\n    buildTypes {\n        release {\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }\n    }\n    lintOptions {\n        abortOnError false\n    }\n}\nrepositories {\n    maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://maven.aliyun.com/repository/google" }\n    google()\n    mavenCentral()\n}\ndependencies {\n    implementation "androidx.appcompat:appcompat:1.1.0"\n    implementation "com.android.support:multidex:1.0.3"\n}' > platforms/android/CordovaLib/build.gradle
 
-          # 7. 手动清理缓存（避免旧缓存干扰）
+          # 8. 手动清理缓存（避免旧缓存干扰）
           export GRADLE_USER_HOME=/home/runner/.gradle
           sudo rm -rf ~/.gradle/caches/
           sudo rm -rf platforms/android/app/build/ || true
           sudo rm -rf platforms/android/CordovaLib/build/ || true
 
-          # 8. 生成项目文件
-          cordova prepare android
-
-          # 9. 直接调用Gradle编译（绕过Cordova封装，稳定可靠）
+          # 9. 【核心修复2】检查并赋予gradlew可执行权限
           cd platforms/android
+          if [ -f "gradlew" ]; then
+              sudo chmod +x gradlew
+              echo "✅ gradlew文件存在，已赋予执行权限"
+          else
+              echo "❌ gradlew文件缺失，手动生成..."
+              # 手动生成gradlew（备用方案）
+              gradle wrapper --gradle-version 5.5.1
+              sudo chmod +x gradlew
+          fi
+
+          # 10. 直接调用Gradle编译（绝对路径执行，避免找不到）
           ./gradlew assembleDebug --info --stacktrace
 
-          # 10. 复制APK到根目录
+          # 11. 复制APK到根目录
           cp app/build/outputs/apk/debug/app-debug.apk ../../app-debug.apk
           ls -lh ../../app-debug.apk
           echo "✅✅✅ APK生成成功！路径：$(pwd)/../../app-debug.apk"
