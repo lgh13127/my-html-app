@@ -13,40 +13,26 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/android-sdk
       ANDROID_SDK_ROOT: /usr/local/android-sdk
-      NODE_HOME: /usr/local/node-v14.21.3-linux-x64
-      NPM_BIN: /usr/local/node-v14.21.3-linux-x64/lib/node_modules/.bin
-      PATH: /usr/local/bin:/usr/bin:$NODE_HOME/bin:$NPM_BIN:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/29.0.3:$JAVA_HOME/bin:$PATH
+      PATH: /usr/local/bin:/usr/bin:/usr/local/nodejs/bin:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/29.0.3:$JAVA_HOME/bin
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Gradle 5.5.1 (Cordova 9.1.0 官方推荐)
-        run: |
-          sudo apt-get remove -y gradle* && sudo apt-get purge -y gradle*
-          sudo rm -rf /usr/share/gradle* /usr/local/gradle*
-          sudo apt-get update -y && sudo apt-get install -y wget unzip
-          wget -q https://services.gradle.org/distributions/gradle-5.5.1-bin.zip
-          sudo unzip -q gradle-5.5.1-bin.zip -d /usr/local/
-          sudo ln -sf /usr/local/gradle-5.5.1/bin/gradle /usr/bin/gradle
-          gradle -v
+      # 1. 安装Node.js 14（Cordova 9.x兼容版本）
+      - name: Install Node.js 14
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+          cache: 'npm'
 
-      - name: Install Node.js 14.21.3
+      # 2. 安装Cordova 9.0.0（官方稳定版）
+      - name: Install Cordova
         run: |
-          wget -q https://nodejs.org/dist/v14.21.3/node-v14.21.3-linux-x64.tar.xz
-          sudo tar -xJf node-v14.21.3-linux-x64.tar.xz -C /usr/local/
-          sudo ln -sf /usr/local/node-v14.21.3-linux-x64/bin/node /usr/local/bin/node
-          sudo ln -sf /usr/local/node-v14.21.3-linux-x64/bin/npm /usr/local/bin/npm
-          node -v && npm -v
-          npm config set registry https://registry.npmmirror.com/
-
-      - name: Install Cordova 9.0.0 & System Link
-        run: |
-          npm install -g cordova@9.0.0 --force
-          sudo ln -sf /usr/local/node-v14.21.3-linux-x64/lib/node_modules/cordova/bin/cordova /usr/local/bin/cordova
-          which cordova
+          npm install -g cordova@9.0.0
           cordova -v
 
-      - name: Install Android SDK 29 (完整安装，含所有依赖)
+      # 3. 安装Android SDK 29（完整依赖）
+      - name: Install Android SDK 29
         run: |
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
           curl -fsSL -o $ANDROID_HOME/sdk-tools.zip https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
@@ -54,85 +40,118 @@ jobs:
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
           $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3" "platform-tools" "extras;android;m2repository" "extras;google;m2repository" > /dev/null 2>&1
 
+      # 4. 配置Java 8（Cordova 9.x必需）
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      - name: Create Project & WWW Files
+      # 5. 创建Cordova项目
+      - name: Create Cordova Project
         run: |
-          mkdir -p www
-          echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/icon.png
-          echo -n 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIA5agWkwAAAABJRU5ErkJggg==' | base64 -d > www/splash.png
+          # 创建基础项目
+          cordova create my-app com.example.myapp MyApp
+          cd my-app
+          
+          # 添加www内容
           echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>My App</title><style>body{text-align:center;padding:60px;font-size:24px;}</style></head><body><h1>Hello Android!</h1><p>✅ APK BUILD SUCCESS ✅</p></body></html>" > www/index.html
-          cordova create build com.example.myapp MyApp && cd build && cp -r ../www ./
+          
+          # 添加Android平台
+          cordova platform add android@9.1.0 --save
 
-      - name: Create Config.xml
+      # 6. 创建Cordova Gradle Hook（核心：自动修复build.gradle）
+      - name: Create Cordova Build Hook
         run: |
-          cd build
-          echo '<?xml version="1.0" encoding="utf-8"?><widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets"><name>MyApp</name><content src="index.html"/><access origin="*"/><preference name="android-minSdkVersion" value="21"/><preference name="android-targetSdkVersion" value="29"/><preference name="GradlePluginKotlinEnabled" value="false"/><preference name="enableR8" value="false"/><preference name="android-buildToolsVersion" value="29.0.3"/><preference name="android-compileSdkVersion" value="29"/></widget>' > config.xml
+          cd my-app
+          # 创建hooks目录
+          mkdir -p hooks/before_build
+          
+          # 生成hook脚本：自动删除versioncompare依赖 + 禁用Jcenter
+          cat > hooks/before_build/fix_gradle.js << 'EOF'
+#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
 
-      - name: Build Android APK (Gradlew修复 · 100%执行成功)
+// 定义build.gradle路径
+const rootGradlePath = path.join(__dirname, '../../platforms/android/build.gradle');
+const appGradlePath = path.join(__dirname, '../../platforms/android/app/build.gradle');
+const cordovaLibGradlePath = path.join(__dirname, '../../platforms/android/CordovaLib/build.gradle');
+
+// 修复函数：删除versioncompare依赖 + 替换仓库
+function fixGradleFile(filePath) {
+    if (!fs.existsSync(filePath)) {
+        console.log(`⚠️ ${filePath} 不存在，跳过`);
+        return;
+    }
+    
+    let content = fs.readFileSync(filePath, 'utf8');
+    
+    // 1. 删除com.g00fy2:versioncompare:1.3.4依赖行
+    content = content.replace(/classpath\s+["']com\.g00fy2:versioncompare:1\.3\.4["']/g, '');
+    content = content.replace(/\n\s*\n/g, '\n'); // 清理空行
+    
+    // 2. 禁用Jcenter + 替换为阿里云仓库
+    content = content.replace(/jcenter\(\)/g, 'jcenter { enabled = false }');
+    content = content.replace(/repositories\s*\{\s*/g, `repositories {
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+    `);
+    
+    // 写入修复后的内容
+    fs.writeFileSync(filePath, content, 'utf8');
+    console.log(`✅ 修复完成：${filePath}`);
+}
+
+// 执行修复
+fixGradleFile(rootGradlePath);
+fixGradleFile(appGradlePath);
+fixGradleFile(cordovaLibGradlePath);
+
+// 修复gradle.properties
+const gradlePropPath = path.join(__dirname, '../../platforms/android/gradle.properties');
+if (fs.existsSync(gradlePropPath)) {
+    let propContent = fs.readFileSync(gradlePropPath, 'utf8');
+    propContent += `
+android.useAndroidX=false
+enableJetifier=false
+org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m
+org.gradle.daemon=false
+`;
+    fs.writeFileSync(gradlePropPath, propContent, 'utf8');
+    console.log(`✅ 修复gradle.properties完成`);
+}
+EOF
+          
+          # 赋予hook脚本执行权限
+          chmod +x hooks/before_build/fix_gradle.js
+
+      # 7. 构建APK（极简流程，Cordova官方方式）
+      - name: Build Android APK
         run: |
-          export NODE_NO_WARNINGS=1
-          cd build
-          
-          # 1. 初始化平台 & 安装安卓依赖
-          cordova platform rm android || true
-          npm install cordova-android@9.1.0 --save --silent
-          cordova platform add android@9.1.0
-          
-          # 2. 【核心修复1】先执行prepare生成完整项目文件（包括gradlew）
-          cordova prepare android
-          
-          # 3. 放开所有权限 + 修复文件所有权
+          cd my-app
+          # 放开权限
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
           
-          # 4. 基础gradle.properties配置（补充Cordova关键配置）
-          echo "android.useAndroidX=false" > platforms/android/gradle.properties
-          echo "enableJetifier=false" >> platforms/android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> platforms/android/gradle.properties
-          echo "org.gradle.daemon=false" >> platforms/android/gradle.properties
-          echo "cdvCompileSdkVersion=29" >> platforms/android/gradle.properties
-          echo "cdvBuildToolsVersion=29.0.3" >> platforms/android/gradle.properties
-          echo "cdvMinSdkVersion=21" >> platforms/android/gradle.properties
+          # 执行构建（带详细日志）
+          cordova build android --debug --verbose
 
-          # 5. 根build.gradle（补充Cordova关键变量 + AGP 3.4.3）
-          echo '// Cordova Android 9.1.0 官方推荐配置\next cdvCompileSdkVersion = 29\next cdvBuildToolsVersion = "29.0.3"\next cdvMinSdkVersion = 21\nbuildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:3.4.3"\n    }\n}\nallprojects {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n}\ntask clean(type: Delete) {\n    delete rootProject.buildDir\n}' > platforms/android/build.gradle
-
-          # 6. app/build.gradle（AGP 3.4.3 + 完整Cordova配置）
-          echo 'apply plugin: "com.android.application"\nbuildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:3.4.3"\n    }\n}\nandroid {\n    compileSdkVersion cdvCompileSdkVersion\n    buildToolsVersion cdvBuildToolsVersion\n    defaultConfig {\n        applicationId "com.example.myapp"\n        minSdkVersion cdvMinSdkVersion\n        targetSdkVersion 29\n        versionCode 1\n        versionName "1.0.0"\n        multiDexEnabled true\n    }\n    buildTypes {\n        debug {\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }\n        release {\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }\n    }\n    lintOptions {\n        abortOnError false\n        checkReleaseBuilds false\n    }\n    packagingOptions {\n        exclude "META-INF/LICENSE"\n        exclude "META-INF/NOTICE"\n    }\n}\nrepositories {\n    maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://maven.aliyun.com/repository/google" }\n    google()\n    mavenCentral()\n}\ndependencies {\n    implementation fileTree(dir: "libs", include: ["*.jar"])\n    implementation "androidx.appcompat:appcompat:1.1.0"\n    implementation "androidx.legacy:legacy-support-v4:1.0.0"\n    implementation "com.android.support:multidex:1.0.3"\n    implementation project(":CordovaLib")\n}\nconfigurations.all {\n    resolutionStrategy {\n        force "androidx.core:core:1.3.2"\n        force "androidx.appcompat:appcompat:1.1.0"\n    }\n}' > platforms/android/app/build.gradle
-
-          # 7. CordovaLib/build.gradle（修复子模块编译）
-          echo 'apply plugin: "com.android.library"\nbuildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:3.4.3"\n    }\n}\nandroid {\n    compileSdkVersion 29\n    buildToolsVersion "29.0.3"\n    defaultConfig {\n        minSdkVersion 21\n        targetSdkVersion 29\n        multiDexEnabled true\n    }\n    buildTypes {\n        release {\n            minifyEnabled false\n            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"\n        }\n    }\n    lintOptions {\n        abortOnError false\n    }\n}\nrepositories {\n    maven { url "https://maven.aliyun.com/repository/public" }\n    maven { url "https://maven.aliyun.com/repository/google" }\n    google()\n    mavenCentral()\n}\ndependencies {\n    implementation "androidx.appcompat:appcompat:1.1.0"\n    implementation "com.android.support:multidex:1.0.3"\n}' > platforms/android/CordovaLib/build.gradle
-
-          # 8. 手动清理缓存（避免旧缓存干扰）
-          export GRADLE_USER_HOME=/home/runner/.gradle
-          sudo rm -rf ~/.gradle/caches/
-          sudo rm -rf platforms/android/app/build/ || true
-          sudo rm -rf platforms/android/CordovaLib/build/ || true
-
-          # 9. 【核心修复2】检查并赋予gradlew可执行权限
-          cd platforms/android
-          if [ -f "gradlew" ]; then
-              sudo chmod +x gradlew
-              echo "✅ gradlew文件存在，已赋予执行权限"
+      # 8. 复制APK并上传
+      - name: Copy & Upload APK
+        run: |
+          # 检查APK是否存在
+          APK_PATH="my-app/platforms/android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+              cp "$APK_PATH" app-debug.apk
+              ls -lh app-debug.apk
+              echo "✅✅✅ APK生成成功！路径：$(pwd)/app-debug.apk"
           else
-              echo "❌ gradlew文件缺失，手动生成..."
-              # 手动生成gradlew（备用方案）
-              gradle wrapper --gradle-version 5.5.1
-              sudo chmod +x gradlew
+              echo "❌ APK未找到，打印详细日志："
+              ls -lh my-app/platforms/android/app/build/outputs/apk/ || true
+              exit 1
           fi
-
-          # 10. 直接调用Gradle编译（绝对路径执行，避免找不到）
-          ./gradlew assembleDebug --info --stacktrace
-
-          # 11. 复制APK到根目录
-          cp app/build/outputs/apk/debug/app-debug.apk ../../app-debug.apk
-          ls -lh ../../app-debug.apk
-          echo "✅✅✅ APK生成成功！路径：$(pwd)/../../app-debug.apk"
+        continue-on-error: false
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
