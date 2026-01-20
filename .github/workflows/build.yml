@@ -18,20 +18,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 安装Node.js 14（Cordova 9.x兼容版本）
+      # 1. 安装Node.js 14（Cordova 9.x兼容版本，禁用缓存）
       - name: Install Node.js 14
         uses: actions/setup-node@v4
         with:
           node-version: 14.x
-          cache: 'npm'
+          # 核心修复：删除cache: 'npm'，避免锁文件检查报错
 
-      # 2. 安装Cordova 9.0.0（官方稳定版）
+      # 2. 生成基础package.json和lock文件（解决Node环境依赖问题）
+      - name: Create Basic Package Files
+        run: |
+          # 生成package.json
+          echo '{
+            "name": "my-html-app",
+            "version": "1.0.0",
+            "description": "Cordova Android App",
+            "main": "index.js",
+            "scripts": {
+              "test": "echo \"Error: no test specified\" && exit 1"
+            },
+            "dependencies": {
+              "cordova-android": "^9.1.0"
+            },
+            "author": "",
+            "license": "ISC"
+          }' > package.json
+          
+          # 生成package-lock.json（避免缓存检查报错）
+          npm install --package-lock-only
+
+      # 3. 安装Cordova 9.0.0（官方稳定版）
       - name: Install Cordova
         run: |
           npm install -g cordova@9.0.0
           cordova -v
 
-      # 3. 安装Android SDK 29（完整依赖）
+      # 4. 安装Android SDK 29（完整依赖）
       - name: Install Android SDK 29
         run: |
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
@@ -40,14 +62,14 @@ jobs:
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
           $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3" "platform-tools" "extras;android;m2repository" "extras;google;m2repository" > /dev/null 2>&1
 
-      # 4. 配置Java 8（Cordova 9.x必需）
+      # 5. 配置Java 8（Cordova 9.x必需）
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      # 5. 创建Cordova项目
+      # 6. 创建Cordova项目
       - name: Create Cordova Project
         run: |
           # 创建基础项目
@@ -60,20 +82,20 @@ jobs:
           # 添加Android平台
           cordova platform add android@9.1.0 --save
 
-      # 6. 创建Cordova Gradle Hook（核心：自动修复build.gradle，单行生成避免YAML语法错误）
+      # 7. 创建Cordova Gradle Hook（核心：自动修复build.gradle，单行生成避免YAML语法错误）
       - name: Create Cordova Build Hook
         run: |
           cd my-app
           # 创建hooks目录
           mkdir -p hooks/before_build
           
-          # 生成hook脚本：单行字符串+\\n换行，避免YAML语法错误（核心修复）
+          # 生成hook脚本：单行字符串+\\n换行，避免YAML语法错误
           echo '#!/usr/bin/env node\nconst fs = require("fs");\nconst path = require("path");\n\n// 定义build.gradle路径\nconst rootGradlePath = path.join(__dirname, "../../platforms/android/build.gradle");\nconst appGradlePath = path.join(__dirname, "../../platforms/android/app/build.gradle");\nconst cordovaLibGradlePath = path.join(__dirname, "../../platforms/android/CordovaLib/build.gradle");\n\n// 修复函数：删除versioncompare依赖 + 替换仓库\nfunction fixGradleFile(filePath) {\n    if (!fs.existsSync(filePath)) {\n        console.log(`⚠️ ${filePath} 不存在，跳过`);\n        return;\n    }\n    \n    let content = fs.readFileSync(filePath, "utf8");\n    \n    // 1. 删除com.g00fy2:versioncompare:1.3.4依赖行\n    content = content.replace(/classpath\\s+["\']com\\.g00fy2:versioncompare:1\\.3\\.4["\']/g, "");\n    content = content.replace(/\\n\\s*\\n/g, "\\n"); // 清理空行\n    \n    // 2. 禁用Jcenter + 替换为阿里云仓库\n    content = content.replace(/jcenter\\(\\)/g, "jcenter { enabled = false }");\n    content = content.replace(/repositories\\s*\\{\\s*/g, `repositories {\\n        maven { url \'https://maven.aliyun.com/repository/public\' }\\n        maven { url \'https://maven.aliyun.com/repository/google\' }\\n    `);\n    \n    // 写入修复后的内容\n    fs.writeFileSync(filePath, content, "utf8");\n    console.log(`✅ 修复完成：${filePath}`);\n}\n\n// 执行修复\nfixGradleFile(rootGradlePath);\nfixGradleFile(appGradlePath);\nfixGradleFile(cordovaLibGradlePath);\n\n// 修复gradle.properties\nconst gradlePropPath = path.join(__dirname, "../../platforms/android/gradle.properties");\nif (fs.existsSync(gradlePropPath)) {\n    let propContent = fs.readFileSync(gradlePropPath, "utf8");\n    propContent += `\nandroid.useAndroidX=false\nenableJetifier=false\norg.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m\norg.gradle.daemon=false\n`;\n    fs.writeFileSync(gradlePropPath, propContent, "utf8");\n    console.log(`✅ 修复gradle.properties完成`);\n}' > hooks/before_build/fix_gradle.js
           
           # 赋予hook脚本执行权限
           chmod +x hooks/before_build/fix_gradle.js
 
-      # 7. 构建APK（极简流程，Cordova官方方式）
+      # 8. 构建APK（极简流程，Cordova官方方式）
       - name: Build Android APK
         run: |
           cd my-app
@@ -84,7 +106,7 @@ jobs:
           # 执行构建（带详细日志）
           cordova build android --debug --verbose
 
-      # 8. 复制APK并上传
+      # 9. 复制APK并上传
       - name: Copy & Upload APK
         run: |
           # 检查APK是否存在
