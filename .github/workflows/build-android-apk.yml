@@ -14,25 +14,19 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest # 使用Ubuntu系统构建（GitHub提供的虚拟机）
     env:
-      # 环境变量：补充Gradle路径，指定兼容版本
+      # 环境变量：指定路径（修复env.PATH循环引用问题）
       GRADLE_HOME: /usr/local/gradle-7.5.1
       ANDROID_HOME: /usr/local/android-sdk
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
-      PATH: ${{ env.PATH }}:${{ env.GRADLE_HOME }}/bin:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/33.0.2
+      # 正确写法：直接拼接路径，不引用env.PATH
+      PATH: /usr/local/gradle-7.5.1/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/33.0.2:$PATH
 
     steps:
       # 步骤1：拉取仓库代码到云端虚拟机
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 步骤2：配置Node.js环境（Cordova依赖Node.js）
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18.x # 兼容Cordova的LTS版本
-          cache: 'npm' # 缓存npm依赖，加速构建
-
-      # 新增步骤：安装指定Gradle版本（适配Cordova 12 + Android 12.0.0）
+      # 新增：安装指定Gradle版本（参考build.yml，适配Cordova 12）
       - name: Install Gradle 7.5.1
         run: |
           sudo apt-get remove -y gradle
@@ -41,6 +35,13 @@ jobs:
           sudo unzip -q /tmp/gradle-7.5.1.zip -d /usr/local/
           sudo ln -sf /usr/local/gradle-7.5.1/bin/gradle /usr/bin/gradle
           gradle -v
+
+      # 步骤2：配置Node.js环境（Cordova依赖Node.js）
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x # 兼容Cordova的LTS版本
+          cache: 'npm' # 缓存npm依赖，加速构建
 
       # 步骤3：安装Cordova CLI（全局安装）
       - name: Install Cordova
@@ -86,16 +87,15 @@ jobs:
           cordova plugin add cordova-plugin-media-capture
           cordova plugin add cordova-plugin-android-permissions
           cordova plugin add cordova-plugin-webview-plus
-          # 新增：prepare步骤，确保平台配置生效
+          # 参考build.yml：添加prepare步骤+权限处理
           cordova prepare android
-          # 新增：修复目录权限（避免构建时权限不足）
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
           # 验证平台和插件
           cordova platforms list
           cordova plugins list
 
-      # 新增核心步骤：修复CordovaLib仓库镜像（解决国内依赖下载失败）
+      # 参考build.yml：核心修复CordovaLib仓库镜像（解决依赖下载失败）
       - name: Fix CordovaLib Repository (Aliyun Mirror)
         run: |
           cd platforms/android/CordovaLib
@@ -127,7 +127,7 @@ jobs:
         run: |
           # 构建APK（自动读取config.xml的权限配置）
           cordova build android --debug --verbose
-          # 增强：验证APK是否生成（更完善的错误处理）
+          # 参考build.yml：增强APK检查逻辑
           APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
               ls -lh $APK_PATH
