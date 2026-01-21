@@ -9,18 +9,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 核心修复：拆分env变量，避免内部引用导致的语法错误
+    # 核心修复：所有环境变量统一在job级别定义，PATH用纯硬编码绝对路径
     env:
       GRADLE_HOME: /usr/local/gradle-5.5.1
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/android-sdk
       ANDROID_SDK_ROOT: /usr/local/android-sdk
-    # 单独定义PATH，用完整路径拼接，不引用env变量
-    defaults:
-      run:
-        shell: bash
-        env:
-          PATH: /usr/local/gradle-5.5.1/bin:/usr/local/bin:/usr/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/29.0.3:/usr/lib/jvm/temurin-8-jdk-amd64/bin
+      # PATH用纯硬编码，无任何变量引用，符合YAML语法规范
+      PATH: /usr/local/gradle-5.5.1/bin:/usr/local/bin:/usr/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/29.0.3:/usr/lib/jvm/temurin-8-jdk-amd64/bin
 
     steps:
       - uses: actions/checkout@v4
