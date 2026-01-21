@@ -1,0 +1,96 @@
+# 工作流名称（显示在GitHub Actions页面）
+name: Build Android APK (Agora Audio Call)
+
+# 触发条件：提交代码到main/master分支、手动触发
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: # 允许手动触发构建
+
+# 定义构建任务
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest # 使用Ubuntu系统构建（GitHub提供的虚拟机）
+    env:
+      # 环境变量：指定Android SDK/Java/Gradle路径
+      ANDROID_HOME: /usr/local/android-sdk
+      JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
+      PATH: ${{ env.PATH }}:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/33.0.2
+
+    steps:
+      # 步骤1：拉取仓库代码到云端虚拟机
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 步骤2：配置Node.js环境（Cordova依赖Node.js）
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x # 兼容Cordova的LTS版本
+          cache: 'npm' # 缓存npm依赖，加速构建
+
+      # 步骤3：安装Cordova CLI（全局安装）
+      - name: Install Cordova
+        run: |
+          npm install -g cordova@12.0.0 # 稳定版，兼容Android SDK 33
+          cordova -v # 验证安装
+
+      # 步骤4：配置Java 8（Android构建必需）
+      - name: Setup Java 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      # 步骤5：安装Android SDK（自动下载所需版本）
+      - name: Install Android SDK
+        run: |
+          # 创建SDK目录并授权
+          sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
+          # 下载SDK工具包
+          curl -fsSL -o $ANDROID_HOME/sdk-tools.zip https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
+          unzip -q $ANDROID_HOME/sdk-tools.zip -d $ANDROID_HOME
+          # 接受所有SDK许可协议
+          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
+          # 安装所需的Android SDK组件（适配Cordova）
+          $ANDROID_HOME/tools/bin/sdkmanager \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools" \
+            "extras;android;m2repository" \
+            "extras;google;m2repository" > /dev/null 2>&1
+
+      # 步骤6：初始化Cordova项目（关联仓库中的www目录和config.xml）
+      - name: Initialize Cordova Project
+        run: |
+          # 若仓库无package.json，重新创建项目（确保目录结构匹配）
+          if [ ! -f "package.json" ]; then
+              cordova create . com.agora.audiocall AudioCall
+          fi
+          # 添加Android平台（指定版本，兼容SDK 33）
+          cordova platform add android@12.0.0 --save
+          # 安装声网项目所需的Cordova插件（权限、WebView增强）
+          cordova plugin add cordova-plugin-media-capture
+          cordova plugin add cordova-plugin-android-permissions
+          cordova plugin add cordova-plugin-webview-plus
+          # 验证平台和插件
+          cordova platforms list
+          cordova plugins list
+
+      # 步骤7：构建Debug版APK（核心步骤）
+      - name: Build Android APK
+        run: |
+          # 构建APK（自动读取config.xml的权限配置）
+          cordova build android --debug --verbose
+          # 验证APK是否生成
+          ls -lh platforms/android/app/build/outputs/apk/debug/
+
+      # 步骤8：上传APK作为构建产物（方便下载）
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-audio-call-apk # 产物名称（自定义）
+          path: platforms/android/app/build/outputs/apk/debug/app-debug.apk # APK路径
+          if-no-files-found: error # 无APK则构建失败
