@@ -50,12 +50,13 @@ jobs:
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
           $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3" "platform-tools" "extras;android;m2repository" "extras;google;m2repository" > /dev/null 2>&1
 
-      # 5. 配置Java 8（核心修复：移除非法java-home参数）
+      # 5. 配置Java 8
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
+          java-home: ${{ env.JAVA_HOME }}
 
       # 6. 创建Cordova项目 + 使用Android 8.1.0
       - name: Create Cordova Project
