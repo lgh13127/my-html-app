@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 14.x
 
-      # 3. 安装Cordova 9.0.0（兼容8.1.0平台）
+      # 3. 安装Cordova 9.0.0
       - name: Install Cordova
         run: |
           npm install -g cordova@9.0.0
@@ -58,34 +58,37 @@ jobs:
           distribution: 'temurin'
           java-home: ${{ env.JAVA_HOME }}
 
-      # 6. 创建Cordova项目 + 使用Android 8.1.0（核心！无versioncompare依赖）
+      # 6. 创建Cordova项目 + 使用Android 8.1.0
       - name: Create Cordova Project
         run: |
-          # 创建项目
           cordova create my-app com.example.myapp MyApp
           cd my-app
-          
-          # 添加www页面
           echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>My App</title><style>body{text-align:center;padding:60px;font-size:24px;}</style></head><body><h1>Hello Android!</h1><p>✅ APK BUILD SUCCESS ✅</p></body></html>" > www/index.html
-          
-          # 关键：添加Android 8.1.0平台（无versioncompare依赖）
           cordova platform add android@8.1.0 --save
-          
-          # 生成项目文件（无需修改gradle）
           cordova prepare android
-          
-          # 放开权限
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
 
-      # 7. 构建APK（无任何gradle修改，直接构建）
+      # 7. 核心修复：仅给CordovaLib添加阿里云Jcenter镜像（极简写法）
+      - name: Fix CordovaLib Repository
+        run: |
+          cd my-app/platforms/android/CordovaLib
+          # 安全写法：在buildscript的repositories中添加阿里云Jcenter镜像（仅添加一次）
+          sed -i '/buildscript {/a \    repositories { maven { url "https://maven.aliyun.com/repository/jcenter" } }' build.gradle
+          # 补充普通repositories的镜像（仅添加一次）
+          sed -i '/repositories {/a \    maven { url "https://maven.aliyun.com/repository/jcenter" }' build.gradle
+          # 验证修改结果（确保语法正确）
+          echo "===== CordovaLib/build.gradle buildscript部分 ====="
+          grep -A 10 "buildscript {" build.gradle | head -15
+          echo "================================================"
+
+      # 8. 构建APK
       - name: Build Android APK
         run: |
           cd my-app
-          # 直接构建，无需任何gradle修改
           cordova build android --debug --verbose
 
-      # 8. 复制并上传APK
+      # 9. 复制并上传APK
       - name: Copy & Upload APK
         run: |
           APK_PATH="my-app/platforms/android/app/build/outputs/apk/debug/app-debug.apk"
