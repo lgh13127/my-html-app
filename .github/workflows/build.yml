@@ -9,18 +9,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 核心修复：拆分env变量，避免内部引用导致的语法错误
     env:
-      # 核心配置：强制使用Gradle 5.5.1，保留JDK 8
       GRADLE_HOME: /usr/local/gradle-5.5.1
-      PATH: ${{ env.GRADLE_HOME }}/bin:/usr/local/bin:/usr/bin:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/29.0.3:$JAVA_HOME/bin
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/android-sdk
       ANDROID_SDK_ROOT: /usr/local/android-sdk
+    # 单独定义PATH，用完整路径拼接，不引用env变量
+    defaults:
+      run:
+        shell: bash
+        env:
+          PATH: /usr/local/gradle-5.5.1/bin:/usr/local/bin:/usr/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/29.0.3:/usr/lib/jvm/temurin-8-jdk-amd64/bin
 
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 安装Gradle 5.5.1（Cordova 9.1.0官方兼容版本，核心修复）
+      # 1. 安装Gradle 5.5.1（Cordova 9.1.0官方兼容版本）
       - name: Install Gradle 5.5.1
         run: |
           # 卸载系统默认高版本Gradle
