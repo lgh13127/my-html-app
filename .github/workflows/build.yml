@@ -13,43 +13,24 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
       ANDROID_HOME: /usr/local/android-sdk
       ANDROID_SDK_ROOT: /usr/local/android-sdk
-      PATH: /usr/local/bin:/usr/bin:/usr/local/nodejs/bin:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/29.0.3:$JAVA_HOME/bin
+      PATH: /usr/local/bin:/usr/bin:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/29.0.3:$JAVA_HOME/bin
 
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 安装Node.js 14（禁用缓存，避免锁文件报错）
+      # 1. 安装Node.js 14（禁用缓存，无锁文件报错）
       - name: Install Node.js 14
         uses: actions/setup-node@v4
         with:
           node-version: 14.x
 
-      # 2. 生成基础package.json和lock文件（解决Node环境依赖问题）
-      - name: Create Basic Package Files
-        run: |
-          echo '{
-            "name": "my-html-app",
-            "version": "1.0.0",
-            "description": "Cordova Android App",
-            "main": "index.js",
-            "scripts": {
-              "test": "echo \"Error: no test specified\" && exit 1"
-            },
-            "dependencies": {
-              "cordova-android": "^9.1.0"
-            },
-            "author": "",
-            "license": "ISC"
-          }' > package.json
-          npm install --package-lock-only
-
-      # 3. 安装Cordova 9.0.0（官方稳定版）
+      # 2. 安装Cordova 9.0.0（全局安装，无依赖问题）
       - name: Install Cordova
         run: |
           npm install -g cordova@9.0.0
           cordova -v
 
-      # 4. 安装Android SDK 29（完整依赖）
+      # 3. 安装Android SDK 29（完整依赖）
       - name: Install Android SDK 29
         run: |
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
@@ -58,46 +39,66 @@ jobs:
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
           $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3" "platform-tools" "extras;android;m2repository" "extras;google;m2repository" > /dev/null 2>&1
 
-      # 5. 配置Java 8（Cordova 9.x必需）
+      # 4. 配置Java 8（Cordova 9.x必需）
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      # 6. 创建Cordova项目
+      # 5. 创建Cordova项目并生成基础文件
       - name: Create Cordova Project
         run: |
+          # 创建项目
           cordova create my-app com.example.myapp MyApp
           cd my-app
+          
+          # 添加www页面
           echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>My App</title><style>body{text-align:center;padding:60px;font-size:24px;}</style></head><body><h1>Hello Android!</h1><p>✅ APK BUILD SUCCESS ✅</p></body></html>" > www/index.html
+          
+          # 添加Android平台
           cordova platform add android@9.1.0 --save
+          
+          # 生成完整项目文件（含build.gradle/gradlew）
+          cordova prepare android
+          
+          # 放开权限
+          sudo chmod -R 777 platforms/android/
+          sudo chown -R runner:runner platforms/android/
 
-      # 7. 创建Cordova Gradle Hook（Base64编码，彻底避免引号错误）
-      - name: Create Cordova Build Hook
+      # 6. 核心修复：用sed命令直接修改build.gradle（无任何语法冲突）
+      - name: Fix build.gradle with sed
         run: |
-          cd my-app
-          mkdir -p hooks/before_build
+          cd my-app/platforms/android
           
-          # 核心修复：Base64编码Hook脚本，避免引号匹配错误
-          # Node.js脚本内容Base64编码（无任何引号/转义问题）
-          HOOK_SCRIPT_BASE64="IyEvdXNyL2Jpbi9lbnYgbm9kZQpjb25zdCBmcyA9IHJlcXVpcmUoJ2ZzJyk7CmNvbnN0IHBhdGggPSByZXF1aXJlKCdwYXRoJyk7CgkvLyA5定义build.gradle路径CmNvbnN0IHJvb3RHcmFkbGVQYXRoID0gcGF0aC5qb2luKF9fZGlyX18sICcuLi8Li4vZ3JhZGxlcy9hbmRyb2lkL2J1aWxkLmdyYWRsZScpOwpjb25zdCBhcHBHcmFkbGVQYXRoID0gcGF0aC5qb2luKF9fZGlyX18sICcuLi8Li4vZ3JhZGxlcy9hbmRyb2lkL2FwcC9idWlsZC5ncmFkbGUnKTsKY29uc3QgY29yZG92YUxpYkdSYWRsZVBhdGggPSBwYXRoLmpvaW4oX19kaXJfXywgJy4uLy4uL2dyYWRsZXMvYW5kcm9pZC9Db3Jkb3ZhTGliL2J1aWxkLmdyYWRsZScpOwoKLy8g修复函数：删除versioncompare依赖 + 替换仓库CmZ1bmN0aW9u Zml4R3JhZGxlRmlsZShmaWxlUGF0aCkgewogICAgaWYgKCFmcy5leGlzdFN5bmMoZmlsZVBhdGgpKSB7CiAgICAgIGNvbnNvbGUubG9nKGB88J+NiCAke2ZpbGVQYXRob30g5oiR5a6J77yM6LaF566XYDsKICAgICAgcmV0dXJuOwogICAgfQoKICAgIGxldCBjb250ZW50ID0gZnMucmVhZExpbmVTdHJpbmcoZmlsZVBhdGgsICd1dGY4Jyk7CgogICAjIC4g5Y+w5YiGcom.g00fy2:versioncompare:1.3.4依赖行CiAgICBjb250ZW50ID0gY29udGVudC5yZXBsYWNlKC9jbGFzc3BhdGggXFxzKyhcIlwiJ3NvbS5nMDBmeTI6dmVyc2lvbmNvbXBhcmU6MS4zLjQoIid9ZywsICcnKTsKICAgIGNvbnRlbnQgPSBjb250ZW50LnJlcGxhY2UoL1xcblxccypcbiRuL2csICdcbicpOyAvLy 5清理空行CgogICAjIC4g5YiG77yMIcenter + 替换为阿里云仓库CiAgICBjb250ZW50ID0gY29udGVudC5yZXBsYWNlKC9qY2VudGVyKFwpfS9nLCAnamNlbnRlciB7IGVuYWJsZWQgPSBmYWxzZSB9Jyk7CiAgICBjb250ZW50ID0gY29udGVudC5yZXBsYWNlKC9yZXBvc2l0b3JpZXNc cyoqXFx7XFxzKi8sIGByZXBvc2l0b3JpZXMgewogICAgICAgIG1hdmVuIHsgdXJsICdodHRwczovL21hdmVuLmFsaXl1bi5jb20vcmVwb3NpdG9yeS9wdWJsaWMnIH0KICAgICAgICBtYXZlbiB7IHVybC AnaHR0cHM6Ly9tYXZlbi5hbGl5dW4uY29tL3JlcG9zaXRvcnkvZ29vZ2xlJyB9CiAgICBgfSk7CgogICAj I写入修复后的内容CiAgICBmcy53cml0ZUZpbGVSZXN0cmluZyhmaWxlUGF0aCwgY29udGVudCwgJ3V0Zjg nKTsKICAgIGNvbnNvbGUubG9nKGD88J+NiCA5Y+w5YiG5完成77yM：JHtmaWxlUGF0aH0gYDsKfQoKLy8 I执行修复CmZpeEdyYWRsZUZpbGUocm9vdEdyYWRsZVBhdGgpOwpm aXhHcmFkbGVMaWZlKGFwcEdyYWRsZVBhdGgpOwpm aXhHcmFkbGVMaWZlKGNvcmRvdmFMaWJHJy4uLy4uL2dyYWRsZXMvYW5kcm9pZC9ncmFkbGUucHJvcGVydGllcyl9OwoKaWYgKGZzLmV4aXNTeW5jKGdyYWRsZVB yb3BQYXRoKSkgewogICAgbGV0IHByb3BDb250ZW50ID0gZnMucmVhZExpbmVTdHJpbmcoZ3JhZGxlUHJvcF BhdGgsICd1dGY4Jyk7CiAgICBwcm9wQ29udGVudCArPSBgCmFuZHJvaWQudXNlQW5kcm9pZFggPSBmYWxz ZQo7ZW5hYmxlSmV0aWZpZXIgPSBmYWxzZQo7b3JnLmdyYWRsZS5qdm1hcmdzPSAtWH14MjA0OG0gLSBYWDp NYXhQZXJtU2l6ZT01MTJtCjtvcmcuZ3JhZGxlLmRhZW1vbiA9IGZhbHNlCmB7CiAgICAgIGZzLndyaXRl RmlsZVJlc3RyaW5nKGdyYWRsZVByb3BQYXRoLCBwcm9wQ29udGVudCwgJ3V0Zjg nKTsKICAgIGNvbnNvbGUubG9nKGD88J+NiCA5Y+w5YiG5修复gradle.properties完成YDsKfQ=="
+          # 1. 修改根build.gradle
+          # 删除versioncompare依赖 + 禁用Jcenter + 添加阿里云仓库
+          sed -i '/com.g00fy2:versioncompare:1.3.4/d' build.gradle
+          sed -i 's/jcenter()/jcenter { enabled = false }/g' build.gradle
+          sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' build.gradle
           
-          # 解码并写入Hook脚本文件（彻底避免引号问题）
-          echo "$HOOK_SCRIPT_BASE64" | base64 -d > hooks/before_build/fix_gradle.js
+          # 2. 修改app/build.gradle
+          sed -i '/com.g00fy2:versioncompare:1.3.4/d' app/build.gradle
+          sed -i 's/jcenter()/jcenter { enabled = false }/g' app/build.gradle
+          sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' app/build.gradle
           
-          # 赋予执行权限
-          chmod +x hooks/before_build/fix_gradle.js
+          # 3. 修改CordovaLib/build.gradle
+          sed -i 's/jcenter()/jcenter { enabled = false }/g' CordovaLib/build.gradle
+          sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' CordovaLib/build.gradle
+          
+          # 4. 修改gradle.properties
+          echo "android.useAndroidX=false" >> gradle.properties
+          echo "enableJetifier=false" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> gradle.properties
+          echo "org.gradle.daemon=false" >> gradle.properties
 
-      # 8. 构建APK（极简流程，Cordova官方方式）
+      # 7. 构建APK（Cordova官方命令，极简稳定）
       - name: Build Android APK
         run: |
           cd my-app
-          sudo chmod -R 777 platforms/android/
-          sudo chown -R runner:runner platforms/android/
           cordova build android --debug --verbose
 
-      # 9. 复制APK并上传
+      # 8. 复制并上传APK
       - name: Copy & Upload APK
         run: |
           APK_PATH="my-app/platforms/android/app/build/outputs/apk/debug/app-debug.apk"
@@ -106,7 +107,7 @@ jobs:
               ls -lh app-debug.apk
               echo "✅✅✅ APK生成成功！路径：$(pwd)/app-debug.apk"
           else
-              echo "❌ APK未找到，打印详细日志："
+              echo "❌ APK未找到，打印目录："
               ls -lh my-app/platforms/android/app/build/outputs/apk/ || true
               exit 1
           fi
