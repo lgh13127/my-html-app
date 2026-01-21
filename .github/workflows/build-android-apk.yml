@@ -76,15 +76,48 @@ jobs:
           cordova plugin add cordova-plugin-inappbrowser
           cordova plugin add cordova-plugin-screen-orientation
           
-          # 添加Agora官方Cordova插件（如果可用）
-          # cordova plugin add cordova-plugin-agora --variable APP_ID=4531524ecba946fd868fc547c6d269d7
-          
-          # 安装支持WebView中WebRTC的插件
+          # 添加支持WebView中WebRTC的插件
           cordova plugin add cordova-plugin-android-permissions
           cordova plugin add cordova-plugin-webrtc
           
           # 创建完整的项目结构
           mkdir -p www/css www/js www/img
+          
+          # 创建图标和启动画面文件（使用简单的base64编码图片）
+          # 创建图标文件
+          cat > create_icon.sh << 'EOF'
+          #!/bin/bash
+          # 创建一个简单的图标PNG文件
+          
+          # 安装必要的工具
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          
+          # 创建48x48图标
+          convert -size 48x48 xc:#667eea \
+            -fill "#764ba2" -draw "circle 24,24 12,12" \
+            -fill "white" -pointsize 24 -gravity center -draw "text 0,0 'A'" \
+            www/img/icon.png
+          
+          # 创建各种尺寸的图标
+          convert www/img/icon.png -resize 36x36 www/img/icon-ldpi.png
+          convert www/img/icon.png -resize 48x48 www/img/icon-mdpi.png
+          convert www/img/icon.png -resize 72x72 www/img/icon-hdpi.png
+          convert www/img/icon.png -resize 96x96 www/img/icon-xhdpi.png
+          convert www/img/icon.png -resize 144x144 www/img/icon-xxhdpi.png
+          convert www/img/icon.png -resize 192x192 www/img/icon-xxxhdpi.png
+          
+          # 创建启动画面
+          convert -size 800x1280 gradient:#667eea-#764ba2 \
+            -fill "white" -pointsize 60 -gravity center -draw "text 0,-100 '声网音频'" \
+            -pointsize 40 -gravity center -draw "text 0,50 '通话应用'" \
+            www/img/splash.png
+          
+          echo "图标和启动画面创建完成"
+          EOF
+          
+          chmod +x create_icon.sh
+          ./create_icon.sh
           
           # 复制主HTML文件（声网音频通话界面）
           cat > www/index.html << 'EOF'
@@ -112,7 +145,665 @@ jobs:
                       overflow-x: hidden;
                   }
                   
-                  /* ... [完整CSS样式，与提供的index.html完全一致] ... */
+                  .container {
+                      max-width: 1000px;
+                      margin: 0 auto;
+                      background: white;
+                      border-radius: 20px;
+                      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                      overflow: hidden;
+                      padding: 30px;
+                  }
+                  
+                  .header {
+                      text-align: center;
+                      margin-bottom: 30px;
+                      padding-bottom: 20px;
+                      border-bottom: 2px solid #f0f0f0;
+                  }
+                  
+                  .header h1 {
+                      color: #333;
+                      font-size: 28px;
+                      margin-bottom: 10px;
+                  }
+                  
+                  .header p {
+                      color: #666;
+                      font-size: 16px;
+                  }
+                  
+                  .control-panel {
+                      background: #f8f9fa;
+                      border-radius: 15px;
+                      padding: 25px;
+                      margin-bottom: 30px;
+                      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+                  }
+                  
+                  .input-group {
+                      display: flex;
+                      gap: 15px;
+                      margin-bottom: 20px;
+                      flex-wrap: wrap;
+                  }
+                  
+                  .input-field {
+                      flex: 1;
+                      min-width: 200px;
+                  }
+                  
+                  .input-field label {
+                      display: block;
+                      margin-bottom: 8px;
+                      font-weight: 600;
+                      color: #555;
+                      font-size: 14px;
+                  }
+                  
+                  .input-field input {
+                      width: 100%;
+                      padding: 15px;
+                      border: 2px solid #e0e0e0;
+                      border-radius: 10px;
+                      font-size: 16px;
+                      transition: all 0.3s;
+                  }
+                  
+                  .input-field input:focus {
+                      outline: none;
+                      border-color: #667eea;
+                      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+                  }
+                  
+                  .input-field input::placeholder {
+                      color: #aaa;
+                  }
+                  
+                  .token-hint {
+                      font-size: 12px;
+                      color: #888;
+                      margin-top: 5px;
+                      display: flex;
+                      align-items: center;
+                      gap: 5px;
+                  }
+                  
+                  .token-hint i {
+                      color: #ff9800;
+                  }
+                  
+                  .button-group {
+                      display: flex;
+                      gap: 15px;
+                      margin-bottom: 20px;
+                      flex-wrap: wrap;
+                  }
+                  
+                  button {
+                      padding: 15px 30px;
+                      border: none;
+                      border-radius: 10px;
+                      font-size: 16px;
+                      font-weight: 600;
+                      cursor: pointer;
+                      transition: all 0.3s;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 8px;
+                      min-width: 140px;
+                  }
+                  
+                  button:hover {
+                      transform: translateY(-2px);
+                      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+                  }
+                  
+                  button:disabled {
+                      opacity: 0.6;
+                      cursor: not-allowed;
+                      transform: none !important;
+                      box-shadow: none !important;
+                  }
+                  
+                  .call-btn {
+                      background: linear-gradient(to right, #667eea, #764ba2);
+                      color: white;
+                  }
+                  
+                  .call-btn:hover {
+                      background: linear-gradient(to right, #5a6fd8, #6b4190);
+                  }
+                  
+                  .call-btn.in-call {
+                      background: linear-gradient(to right, #ff6b6b, #ff5252);
+                  }
+                  
+                  .call-btn.in-call:hover {
+                      background: linear-gradient(to right, #ff5252, #e53935);
+                  }
+                  
+                  .mic-btn {
+                      background: #4CAF50;
+                      color: white;
+                  }
+                  
+                  .mic-btn:hover {
+                      background: #43a047;
+                  }
+                  
+                  .mic-btn.muted {
+                      background: #ff6b6b;
+                  }
+                  
+                  .mic-btn.muted:hover {
+                      background: #ff5252;
+                  }
+                  
+                  .members-container {
+                      background: white;
+                      border-radius: 15px;
+                      padding: 25px;
+                      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+                  }
+                  
+                  .members-header {
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      margin-bottom: 20px;
+                      padding-bottom: 15px;
+                      border-bottom: 2px solid #f0f0f0;
+                  }
+                  
+                  .members-header h2 {
+                      color: #333;
+                      font-size: 22px;
+                  }
+                  
+                  .members-count {
+                      background: #667eea;
+                      color: white;
+                      padding: 5px 15px;
+                      border-radius: 20px;
+                      font-weight: 600;
+                  }
+                  
+                  .members-list {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                      gap: 20px;
+                  }
+                  
+                  .member-card {
+                      background: #f8f9fa;
+                      border-radius: 12px;
+                      padding: 20px;
+                      display: flex;
+                      align-items: center;
+                      gap: 15px;
+                      transition: all 0.3s;
+                      border: 2px solid transparent;
+                  }
+                  
+                  .member-card:hover {
+                      transform: translateY(-3px);
+                      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+                      border-color: #667eea;
+                  }
+                  
+                  .member-card.local {
+                      background: linear-gradient(135deg, #e3f2fd, #f3e5f5);
+                  }
+                  
+                  .avatar {
+                      width: 60px;
+                      height: 60px;
+                      border-radius: 50%;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      font-size: 24px;
+                      font-weight: bold;
+                      color: white;
+                      flex-shrink: 0;
+                  }
+                  
+                  .avatar.local {
+                      background: linear-gradient(135deg, #667eea, #764ba2);
+                  }
+                  
+                  .avatar.remote {
+                      background: linear-gradient(135deg, #4CAF50, #2E7D32);
+                  }
+                  
+                  .member-info {
+                      flex: 1;
+                  }
+                  
+                  .member-name {
+                      font-weight: 600;
+                      color: #333;
+                      font-size: 18px;
+                      margin-bottom: 5px;
+                  }
+                  
+                  .member-uid {
+                      color: #666;
+                      font-size: 14px;
+                      margin-bottom: 8px;
+                  }
+                  
+                  .member-status {
+                      display: inline-flex;
+                      align-items: center;
+                      gap: 5px;
+                      padding: 3px 10px;
+                      border-radius: 12px;
+                      font-size: 12px;
+                      font-weight: 600;
+                  }
+                  
+                  .status-online {
+                      background: #e8f5e9;
+                      color: #2E7D32;
+                  }
+                  
+                  .status-muted {
+                      background: #ffebee;
+                      color: #c62828;
+                  }
+                  
+                  .status-speaker {
+                      background: #e3f2fd;
+                      color: #1565c0;
+                  }
+                  
+                  .member-actions {
+                      display: flex;
+                      gap: 8px;
+                  }
+                  
+                  .action-btn {
+                      width: 36px;
+                      height: 36px;
+                      border-radius: 50%;
+                      border: none;
+                      cursor: pointer;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      transition: all 0.3s;
+                      font-size: 18px;
+                  }
+                  
+                  .mute-btn {
+                      background: #ffebee;
+                      color: #c62828;
+                  }
+                  
+                  .mute-btn:hover {
+                      background: #ffcdd2;
+                  }
+                  
+                  .mute-btn.muted {
+                      background: #e0e0e0;
+                      color: #616161;
+                  }
+                  
+                  .empty-state {
+                      text-align: center;
+                      padding: 40px 20px;
+                      color: #666;
+                  }
+                  
+                  .empty-state i {
+                      font-size: 48px;
+                      margin-bottom: 20px;
+                      display: block;
+                  }
+                  
+                  .footer {
+                      text-align: center;
+                      margin-top: 30px;
+                      color: #666;
+                      font-size: 14px;
+                      padding-top: 20px;
+                      border-top: 1px solid #eee;
+                  }
+                  
+                  .call-status {
+                      text-align: center;
+                      margin: 20px 0;
+                      padding: 15px;
+                      border-radius: 10px;
+                      background: #f8f9fa;
+                      font-weight: 600;
+                      display: none;
+                  }
+                  
+                  .call-status.connected {
+                      background: #d4edda;
+                      color: #155724;
+                      border: 1px solid #c3e6cb;
+                  }
+                  
+                  .call-status.disconnected {
+                      background: #f8d7da;
+                      color: #721c24;
+                      border: 1px solid #f5c6cb;
+                  }
+                  
+                  /* 音频设备选择器样式 */
+                  .device-selector {
+                      margin-top: 20px;
+                      padding: 20px;
+                      background: #f0f7ff;
+                      border-radius: 12px;
+                      border-left: 4px solid #667eea;
+                  }
+                  
+                  .device-selector h3 {
+                      margin-bottom: 15px;
+                      color: #333;
+                      font-size: 18px;
+                      display: flex;
+                      align-items: center;
+                      gap: 10px;
+                  }
+                  
+                  .device-selector h3 i {
+                      color: #667eea;
+                  }
+                  
+                  .device-row {
+                      display: flex;
+                      flex-wrap: wrap;
+                      gap: 15px;
+                      margin-bottom: 15px;
+                  }
+                  
+                  .device-group {
+                      flex: 1;
+                      min-width: 200px;
+                  }
+                  
+                  .device-group label {
+                      display: block;
+                      margin-bottom: 8px;
+                      font-weight: 600;
+                      color: #555;
+                      font-size: 14px;
+                  }
+                  
+                  .device-select {
+                      width: 100%;
+                      padding: 12px 15px;
+                      border: 2px solid #e0e0e0;
+                      border-radius: 8px;
+                      font-size: 14px;
+                      background: white;
+                      color: #333;
+                      transition: all 0.3s;
+                      cursor: pointer;
+                  }
+                  
+                  .device-select:focus {
+                      outline: none;
+                      border-color: #667eea;
+                      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+                  }
+                  
+                  .device-select:disabled {
+                      background: #f5f5f5;
+                      color: #999;
+                      cursor: not-allowed;
+                  }
+                  
+                  .device-status {
+                      margin-top: 8px;
+                      font-size: 12px;
+                      color: #666;
+                      display: flex;
+                      align-items: center;
+                      gap: 5px;
+                  }
+                  
+                  .device-status.active {
+                      color: #2E7D32;
+                  }
+                  
+                  .device-status.inactive {
+                      color: #c62828;
+                  }
+                  
+                  .device-actions {
+                      display: flex;
+                      gap: 10px;
+                      margin-top: 10px;
+                  }
+                  
+                  .refresh-btn {
+                      padding: 10px 15px;
+                      background: #6c757d;
+                      color: white;
+                      border: none;
+                      border-radius: 8px;
+                      font-size: 14px;
+                      cursor: pointer;
+                      transition: all 0.3s;
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                  }
+                  
+                  .refresh-btn:hover {
+                      background: #5a6268;
+                      transform: translateY(-1px);
+                  }
+                  
+                  .refresh-btn:disabled {
+                      opacity: 0.6;
+                      cursor: not-allowed;
+                      transform: none !important;
+                  }
+                  
+                  .test-btn {
+                      padding: 10px 15px;
+                      background: #17a2b8;
+                      color: white;
+                      border: none;
+                      border-radius: 8px;
+                      font-size: 14px;
+                      cursor: pointer;
+                      transition: all 0.3s;
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                  }
+                  
+                  .test-btn:hover {
+                      background: #138496;
+                      transform: translateY(-1px);
+                  }
+                  
+                  .test-btn:disabled {
+                      opacity: 0.6;
+                      cursor: not-allowed;
+                      transform: none !important;
+                  }
+                  
+                  .volume-meter {
+                      margin-top: 10px;
+                      height: 8px;
+                      background: #e0e0e0;
+                      border-radius: 4px;
+                      overflow: hidden;
+                      position: relative;
+                      display: none;
+                  }
+                  
+                  .volume-level {
+                      height: 100%;
+                      background: linear-gradient(to right, #4CAF50, #8BC34A, #FFEB3B, #FF9800, #F44336);
+                      border-radius: 4px;
+                      transition: width 0.1s ease;
+                  }
+                  
+                  /* 媒体源选项样式 */
+                  .source-group {
+                      margin-bottom: 15px;
+                  }
+                  
+                  .source-group label {
+                      display: block;
+                      margin-bottom: 8px;
+                      font-weight: 600;
+                      color: #555;
+                      font-size: 14px;
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                  }
+                  
+                  .source-options {
+                      display: flex;
+                      gap: 10px;
+                      flex-wrap: wrap;
+                  }
+                  
+                  .source-option {
+                      display: flex;
+                      align-items: center;
+                      gap: 5px;
+                      cursor: pointer;
+                      padding: 8px 12px;
+                      border-radius: 6px;
+                      background: #f0f0f0;
+                      transition: all 0.3s;
+                  }
+                  
+                  .source-option:hover {
+                      background: #e0e0e0;
+                  }
+                  
+                  .source-option.active {
+                      background: #e3f2fd;
+                      border: 1px solid #667eea;
+                  }
+                  
+                  .source-option input[type="radio"] {
+                      margin: 0;
+                  }
+                  
+                  .source-option label {
+                      margin: 0;
+                      font-weight: normal;
+                      cursor: pointer;
+                  }
+                  
+                  /* 音频处理选项样式 */
+                  .processing-group {
+                      margin-top: 15px;
+                  }
+                  
+                  .processing-group label {
+                      display: block;
+                      margin-bottom: 8px;
+                      font-weight: 600;
+                      color: #555;
+                      font-size: 14px;
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                  }
+                  
+                  .processing-options {
+                      display: flex;
+                      gap: 15px;
+                      flex-wrap: wrap;
+                  }
+                  
+                  .processing-option {
+                      display: flex;
+                      align-items: center;
+                      gap: 5px;
+                      cursor: pointer;
+                      padding: 8px 12px;
+                      border-radius: 6px;
+                      background: #f0f0f0;
+                      transition: all 0.3s;
+                  }
+                  
+                  .processing-option:hover {
+                      background: #e0e0e0;
+                  }
+                  
+                  .processing-option.active {
+                      background: #e8f5e9;
+                      border: 1px solid #4CAF50;
+                  }
+                  
+                  .processing-option input[type="checkbox"] {
+                      margin: 0;
+                  }
+                  
+                  .processing-option label {
+                      margin: 0;
+                      font-weight: normal;
+                      cursor: pointer;
+                  }
+                  
+                  .tooltip {
+                      font-size: 12px;
+                      color: #666;
+                      margin-left: 4px;
+                      cursor: help;
+                  }
+                  
+                  @media (max-width: 768px) {
+                      .container {
+                          padding: 20px;
+                      }
+                      
+                      .input-group {
+                          flex-direction: column;
+                      }
+                      
+                      .input-field {
+                          width: 100%;
+                      }
+                      
+                      .button-group {
+                          justify-content: center;
+                      }
+                      
+                      button {
+                          flex: 1;
+                          min-width: 120px;
+                      }
+                      
+                      .members-list {
+                          grid-template-columns: 1fr;
+                      }
+                      
+                      .device-row {
+                          flex-direction: column;
+                      }
+                      
+                      .device-group {
+                          min-width: 100%;
+                      }
+                      
+                      .source-options {
+                          flex-direction: column;
+                      }
+                      
+                      .processing-options {
+                          flex-direction: column;
+                      }
+                  }
                   
                   @media (max-width: 480px) {
                       .button-group {
@@ -1361,71 +2052,6 @@ jobs:
           </html>
           EOF
           
-          # 创建CSS文件
-          cat > www/css/styles.css << 'EOF'
-          /* 移动端优化样式 */
-          @media (max-width: 768px) {
-              .container {
-                  padding: 10px;
-              }
-              
-              .header h1 {
-                  font-size: 24px;
-              }
-              
-              .header p {
-                  font-size: 14px;
-              }
-              
-              .input-field input {
-                  padding: 12px;
-                  font-size: 14px;
-              }
-              
-              button {
-                  padding: 12px 20px;
-                  font-size: 14px;
-                  min-width: 120px;
-              }
-              
-              .member-card {
-                  padding: 15px;
-              }
-              
-              .avatar {
-                  width: 50px;
-                  height: 50px;
-                  font-size: 20px;
-              }
-          }
-          
-          @media (max-width: 480px) {
-              .container {
-                  padding: 5px;
-              }
-              
-              .header h1 {
-                  font-size: 20px;
-              }
-              
-              .header p {
-                  font-size: 12px;
-              }
-              
-              .control-panel {
-                  padding: 15px;
-              }
-              
-              .members-container {
-                  padding: 15px;
-              }
-              
-              .device-selector {
-                  padding: 15px;
-              }
-          }
-          EOF
-          
           # 创建config.xml
           cat > config.xml << 'EOF'
           <?xml version='1.0' encoding='utf-8'?>
@@ -1451,6 +2077,7 @@ jobs:
                   <preference name="android-minSdkVersion" value="21" />
                   <preference name="android-targetSdkVersion" value="29" />
                   <preference name="Orientation" value="portrait" />
+                  <preference name="Fullscreen" value="false" />
                   
                   <!-- 权限配置 -->
                   <config-file parent="/*" target="AndroidManifest.xml">
@@ -1479,12 +2106,12 @@ jobs:
               
               <!-- 图标和启动画面 -->
               <icon src="www/img/icon.png" />
-              <icon src="www/img/icon.png" platform="android" density="ldpi" />
-              <icon src="www/img/icon.png" platform="android" density="mdpi" />
-              <icon src="www/img/icon.png" platform="android" density="hdpi" />
-              <icon src="www/img/icon.png" platform="android" density="xhdpi" />
-              <icon src="www/img/icon.png" platform="android" density="xxhdpi" />
-              <icon src="www/img/icon.png" platform="android" density="xxxhdpi" />
+              <icon src="www/img/icon-ldpi.png" platform="android" density="ldpi" />
+              <icon src="www/img/icon-mdpi.png" platform="android" density="mdpi" />
+              <icon src="www/img/icon-hdpi.png" platform="android" density="hdpi" />
+              <icon src="www/img/icon-xhdpi.png" platform="android" density="xhdpi" />
+              <icon src="www/img/icon-xxhdpi.png" platform="android" density="xxhdpi" />
+              <icon src="www/img/icon-xxxhdpi.png" platform="android" density="xxxhdpi" />
               
               <splash src="www/img/splash.png" />
               <splash src="www/img/splash.png" platform="android" density="land-ldpi" />
@@ -1571,10 +2198,6 @@ jobs:
           
           app.initialize();
           EOF
-          
-          # 创建简单的图标
-          mkdir -p www/img
-          echo "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAA" > www/img/icon.base64
           
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
