@@ -14,10 +14,11 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest # 使用Ubuntu系统构建（GitHub提供的虚拟机）
     env:
-      # 环境变量：指定Android SDK/Java/Gradle路径
+      # 环境变量：补充Gradle路径，指定兼容版本
+      GRADLE_HOME: /usr/local/gradle-7.5.1
       ANDROID_HOME: /usr/local/android-sdk
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
-      PATH: ${{ env.PATH }}:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/33.0.2
+      PATH: ${{ env.PATH }}:${{ env.GRADLE_HOME }}/bin:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/33.0.2
 
     steps:
       # 步骤1：拉取仓库代码到云端虚拟机
@@ -30,6 +31,16 @@ jobs:
         with:
           node-version: 18.x # 兼容Cordova的LTS版本
           cache: 'npm' # 缓存npm依赖，加速构建
+
+      # 新增步骤：安装指定Gradle版本（适配Cordova 12 + Android 12.0.0）
+      - name: Install Gradle 7.5.1
+        run: |
+          sudo apt-get remove -y gradle
+          sudo rm -rf /usr/share/gradle*
+          wget -q https://services.gradle.org/distributions/gradle-7.5.1-bin.zip -O /tmp/gradle-7.5.1.zip
+          sudo unzip -q /tmp/gradle-7.5.1.zip -d /usr/local/
+          sudo ln -sf /usr/local/gradle-7.5.1/bin/gradle /usr/bin/gradle
+          gradle -v
 
       # 步骤3：安装Cordova CLI（全局安装）
       - name: Install Cordova
@@ -75,17 +86,57 @@ jobs:
           cordova plugin add cordova-plugin-media-capture
           cordova plugin add cordova-plugin-android-permissions
           cordova plugin add cordova-plugin-webview-plus
+          # 新增：prepare步骤，确保平台配置生效
+          cordova prepare android
+          # 新增：修复目录权限（避免构建时权限不足）
+          sudo chmod -R 777 platforms/android/
+          sudo chown -R runner:runner platforms/android/
           # 验证平台和插件
           cordova platforms list
           cordova plugins list
+
+      # 新增核心步骤：修复CordovaLib仓库镜像（解决国内依赖下载失败）
+      - name: Fix CordovaLib Repository (Aliyun Mirror)
+        run: |
+          cd platforms/android/CordovaLib
+          
+          # 修复1：buildscript的repositories块（classpath依赖解析）
+          if grep -q "buildscript {.*repositories {" build.gradle; then
+              sed -i '/buildscript {.*repositories {/a \            maven { url "https://maven.aliyun.com/repository/jcenter" }' build.gradle
+          elif grep -q "buildscript {" build.gradle; then
+              sed -i '/buildscript {/a \    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        jcenter()\n        google()\n    }' build.gradle
+          else
+              sed -i '1i buildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        jcenter()\n        google()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:7.2.0"\n    }\n}' build.gradle
+          fi
+          
+          # 修复2：普通repositories块（项目依赖解析）
+          if grep -q "repositories {" build.gradle; then
+              sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/jcenter" }' build.gradle
+          else
+              sed -i '/android {/i repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        jcenter()\n        google()\n    }' build.gradle
+          fi
+          
+          # 验证修改结果
+          echo "===== CordovaLib/build.gradle 关键部分 ====="
+          grep -A 15 "buildscript {" build.gradle | head -20
+          grep -A 10 "repositories {" build.gradle | head -15
+          echo "============================================="
 
       # 步骤7：构建Debug版APK（核心步骤）
       - name: Build Android APK
         run: |
           # 构建APK（自动读取config.xml的权限配置）
           cordova build android --debug --verbose
-          # 验证APK是否生成
-          ls -lh platforms/android/app/build/outputs/apk/debug/
+          # 增强：验证APK是否生成（更完善的错误处理）
+          APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+              ls -lh $APK_PATH
+              echo "✅ APK构建成功！"
+          else
+              echo "❌ APK未找到，打印目录："
+              ls -lh platforms/android/app/build/outputs/apk/ || true
+              exit 1
+          fi
 
       # 步骤8：上传APK作为构建产物（方便下载）
       - name: Upload APK Artifact
