@@ -1,41 +1,34 @@
-# 工作流名称（显示在GitHub Actions页面）
 name: Build Android APK (Agora Audio Call)
 
-# 触发条件：提交代码到main/master分支、手动触发
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-  workflow_dispatch: # 允许手动触发构建
+  workflow_dispatch:
 
-# 定义构建任务
 jobs:
   build-apk:
-    runs-on: ubuntu-latest # 使用Ubuntu系统构建（GitHub提供的虚拟机）
+    runs-on: ubuntu-latest
     env:
-      # 环境变量：指定路径（修复PATH循环引用+包含系统默认路径）
+      # 1. 补充GRADLE_HOME定义（适配Cordova 12 + Android 33）
       GRADLE_HOME: /usr/local/gradle-7.5.1
       ANDROID_HOME: /usr/local/android-sdk
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
-      # 核心修复：PATH包含系统默认目录（/bin、/usr/bin）+ 工具目录，不引用env.PATH
+      # 2. 修复PATH：移除循环引用，直接拼接绝对路径（优先系统默认路径）
       PATH: /bin:/usr/bin:/usr/local/bin:${{ env.GRADLE_HOME }}/bin:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/33.0.2
 
     steps:
-      # 步骤0：兜底安装基础工具（tar、unzip等），防止环境缺失
+      # 兜底安装基础工具（解决tar/unzip找不到问题）
       - name: Install Basic Dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y tar unzip curl wget
-          # 验证tar路径和可执行性
-          which tar
-          ls -l /bin/tar
-          tar --version
+          which tar && tar --version
 
-      # 步骤1：拉取仓库代码到云端虚拟机
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 步骤2：安装指定Gradle版本（参考build.yml，适配Cordova 12）
+      # 安装指定Gradle版本（匹配env里的GRADLE_HOME）
       - name: Install Gradle 7.5.1
         run: |
           sudo apt-get remove -y gradle || true
@@ -45,37 +38,29 @@ jobs:
           sudo ln -sf /usr/local/gradle-7.5.1/bin/gradle /usr/bin/gradle
           gradle -v
 
-      # 步骤3：配置Node.js环境（Cordova依赖Node.js）
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18.x # 兼容Cordova的LTS版本
-          cache: 'npm' # 缓存npm依赖，加速构建
+          node-version: 18.x
+          cache: 'npm'
 
-      # 步骤4：安装Cordova CLI（全局安装）
       - name: Install Cordova
         run: |
-          npm install -g cordova@12.0.0 # 稳定版，兼容Android SDK 33
-          cordova -v # 验证安装
+          npm install -g cordova@12.0.0
+          cordova -v
 
-      # 步骤5：配置Java 8（Android构建必需）
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      # 步骤6：安装Android SDK（自动下载所需版本）
       - name: Install Android SDK
         run: |
-          # 创建SDK目录并授权
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
-          # 下载SDK工具包（用curl替代wget，兼容更多环境）
           curl -fsSL -o $ANDROID_HOME/sdk-tools.zip https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
           unzip -q $ANDROID_HOME/sdk-tools.zip -d $ANDROID_HOME
-          # 接受所有SDK许可协议
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses > /dev/null 2>&1
-          # 安装所需的Android SDK组件（适配Cordova）
           $ANDROID_HOME/tools/bin/sdkmanager \
             "platforms;android-33" \
             "build-tools;33.0.2" \
@@ -83,33 +68,27 @@ jobs:
             "extras;android;m2repository" \
             "extras;google;m2repository" > /dev/null 2>&1
 
-      # 步骤7：初始化Cordova项目（关联仓库中的www目录和config.xml）
       - name: Initialize Cordova Project
         run: |
-          # 若仓库无package.json，重新创建项目（确保目录结构匹配）
           if [ ! -f "package.json" ]; then
               cordova create . com.agora.audiocall AudioCall
           fi
-          # 添加Android平台（指定版本，兼容SDK 33）
           cordova platform add android@12.0.0 --save
-          # 安装声网项目所需的Cordova插件（权限、WebView增强）
           cordova plugin add cordova-plugin-media-capture
           cordova plugin add cordova-plugin-android-permissions
           cordova plugin add cordova-plugin-webview-plus
-          # 修复权限（参考build.yml）
+          # 修复权限问题
           cordova prepare android
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
-          # 验证平台和插件
           cordova platforms list
           cordova plugins list
 
-      # 步骤8：修复CordovaLib仓库镜像（解决依赖下载失败，参考build.yml）
+      # 修复CordovaLib镜像（解决依赖下载失败）
       - name: Fix CordovaLib Repository (Aliyun Mirror)
         run: |
           cd platforms/android/CordovaLib
-          
-          # 修复1：buildscript的repositories块（classpath依赖解析）
+          # 修复buildscript的repositories块
           if grep -q "buildscript {.*repositories {" build.gradle; then
               sed -i '/buildscript {.*repositories {/a \            maven { url "https://maven.aliyun.com/repository/jcenter" }' build.gradle
           elif grep -q "buildscript {" build.gradle; then
@@ -117,26 +96,21 @@ jobs:
           else
               sed -i '1i buildscript {\n    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        jcenter()\n        google()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:7.2.0"\n    }\n}' build.gradle
           fi
-          
-          # 修复2：普通repositories块（项目依赖解析）
+          # 修复普通repositories块
           if grep -q "repositories {" build.gradle; then
               sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/jcenter" }' build.gradle
           else
               sed -i '/android {/i repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        jcenter()\n        google()\n    }' build.gradle
           fi
-          
-          # 验证修改结果
+          # 验证修改
           echo "===== CordovaLib/build.gradle 关键部分 ====="
           grep -A 15 "buildscript {" build.gradle | head -20
           grep -A 10 "repositories {" build.gradle | head -15
           echo "============================================="
 
-      # 步骤9：构建Debug版APK（核心步骤）
       - name: Build Android APK
         run: |
-          # 构建APK（自动读取config.xml的权限配置）
           cordova build android --debug --verbose
-          # 增强APK检查逻辑（参考build.yml）
           APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
               ls -lh $APK_PATH
@@ -147,10 +121,9 @@ jobs:
               exit 1
           fi
 
-      # 步骤10：上传APK作为构建产物（方便下载）
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agora-audio-call-apk # 产物名称（自定义）
-          path: platforms/android/app/build/outputs/apk/debug/app-debug.apk # APK路径
-          if-no-files-found: error # 无APK则构建失败
+          name: agora-audio-call-apk
+          path: platforms/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
