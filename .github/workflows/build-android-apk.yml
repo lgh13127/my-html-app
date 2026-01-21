@@ -14,54 +14,63 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest # 使用Ubuntu系统构建（GitHub提供的虚拟机）
     env:
-      # 环境变量：指定路径（修复env.PATH循环引用问题）
+      # 环境变量：指定路径（修复PATH循环引用+包含系统默认路径）
       GRADLE_HOME: /usr/local/gradle-7.5.1
       ANDROID_HOME: /usr/local/android-sdk
       JAVA_HOME: /usr/lib/jvm/temurin-8-jdk-amd64
-      # 正确写法：直接拼接路径，不引用env.PATH
-      PATH: /usr/local/gradle-7.5.1/bin:/usr/local/android-sdk/tools:/usr/local/android-sdk/platform-tools:/usr/local/android-sdk/build-tools/33.0.2:$PATH
+      # 核心修复：PATH包含系统默认目录（/bin、/usr/bin）+ 工具目录，不引用env.PATH
+      PATH: /bin:/usr/bin:/usr/local/bin:${{ env.GRADLE_HOME }}/bin:${{ env.ANDROID_HOME }}/tools:${{ env.ANDROID_HOME }}/platform-tools:${{ env.ANDROID_HOME }}/build-tools/33.0.2
 
     steps:
+      # 步骤0：兜底安装基础工具（tar、unzip等），防止环境缺失
+      - name: Install Basic Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y tar unzip curl wget
+          # 验证tar路径和可执行性
+          which tar
+          ls -l /bin/tar
+          tar --version
+
       # 步骤1：拉取仓库代码到云端虚拟机
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 新增：安装指定Gradle版本（参考build.yml，适配Cordova 12）
+      # 步骤2：安装指定Gradle版本（参考build.yml，适配Cordova 12）
       - name: Install Gradle 7.5.1
         run: |
-          sudo apt-get remove -y gradle
-          sudo rm -rf /usr/share/gradle*
+          sudo apt-get remove -y gradle || true
+          sudo rm -rf /usr/share/gradle* || true
           wget -q https://services.gradle.org/distributions/gradle-7.5.1-bin.zip -O /tmp/gradle-7.5.1.zip
-          sudo unzip -q /tmp/gradle-7.5.1.zip -d /usr/local/
+          unzip -q /tmp/gradle-7.5.1.zip -d /usr/local/
           sudo ln -sf /usr/local/gradle-7.5.1/bin/gradle /usr/bin/gradle
           gradle -v
 
-      # 步骤2：配置Node.js环境（Cordova依赖Node.js）
+      # 步骤3：配置Node.js环境（Cordova依赖Node.js）
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18.x # 兼容Cordova的LTS版本
           cache: 'npm' # 缓存npm依赖，加速构建
 
-      # 步骤3：安装Cordova CLI（全局安装）
+      # 步骤4：安装Cordova CLI（全局安装）
       - name: Install Cordova
         run: |
           npm install -g cordova@12.0.0 # 稳定版，兼容Android SDK 33
           cordova -v # 验证安装
 
-      # 步骤4：配置Java 8（Android构建必需）
+      # 步骤5：配置Java 8（Android构建必需）
       - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      # 步骤5：安装Android SDK（自动下载所需版本）
+      # 步骤6：安装Android SDK（自动下载所需版本）
       - name: Install Android SDK
         run: |
           # 创建SDK目录并授权
           sudo mkdir -p $ANDROID_HOME && sudo chmod -R 777 $ANDROID_HOME
-          # 下载SDK工具包
+          # 下载SDK工具包（用curl替代wget，兼容更多环境）
           curl -fsSL -o $ANDROID_HOME/sdk-tools.zip https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
           unzip -q $ANDROID_HOME/sdk-tools.zip -d $ANDROID_HOME
           # 接受所有SDK许可协议
@@ -74,7 +83,7 @@ jobs:
             "extras;android;m2repository" \
             "extras;google;m2repository" > /dev/null 2>&1
 
-      # 步骤6：初始化Cordova项目（关联仓库中的www目录和config.xml）
+      # 步骤7：初始化Cordova项目（关联仓库中的www目录和config.xml）
       - name: Initialize Cordova Project
         run: |
           # 若仓库无package.json，重新创建项目（确保目录结构匹配）
@@ -87,7 +96,7 @@ jobs:
           cordova plugin add cordova-plugin-media-capture
           cordova plugin add cordova-plugin-android-permissions
           cordova plugin add cordova-plugin-webview-plus
-          # 参考build.yml：添加prepare步骤+权限处理
+          # 修复权限（参考build.yml）
           cordova prepare android
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
@@ -95,7 +104,7 @@ jobs:
           cordova platforms list
           cordova plugins list
 
-      # 参考build.yml：核心修复CordovaLib仓库镜像（解决依赖下载失败）
+      # 步骤8：修复CordovaLib仓库镜像（解决依赖下载失败，参考build.yml）
       - name: Fix CordovaLib Repository (Aliyun Mirror)
         run: |
           cd platforms/android/CordovaLib
@@ -122,12 +131,12 @@ jobs:
           grep -A 10 "repositories {" build.gradle | head -15
           echo "============================================="
 
-      # 步骤7：构建Debug版APK（核心步骤）
+      # 步骤9：构建Debug版APK（核心步骤）
       - name: Build Android APK
         run: |
           # 构建APK（自动读取config.xml的权限配置）
           cordova build android --debug --verbose
-          # 参考build.yml：增强APK检查逻辑
+          # 增强APK检查逻辑（参考build.yml）
           APK_PATH="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_PATH" ]; then
               ls -lh $APK_PATH
@@ -138,7 +147,7 @@ jobs:
               exit 1
           fi
 
-      # 步骤8：上传APK作为构建产物（方便下载）
+      # 步骤10：上传APK作为构建产物（方便下载）
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
