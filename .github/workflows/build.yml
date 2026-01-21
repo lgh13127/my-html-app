@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 安装Gradle 5.5.1（Cordova 9.1.0兼容版本）
+      # 1. 安装Gradle 5.5.1（兼容Cordova 8.1.0）
       - name: Install Gradle 5.5.1
         run: |
           sudo apt-get remove -y gradle
@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 14.x
 
-      # 3. 安装Cordova 9.0.0
+      # 3. 安装Cordova 9.0.0（兼容8.1.0平台）
       - name: Install Cordova
         run: |
           npm install -g cordova@9.0.0
@@ -58,68 +58,32 @@ jobs:
           distribution: 'temurin'
           java-home: ${{ env.JAVA_HOME }}
 
-      # 6. 创建Cordova项目
+      # 6. 创建Cordova项目 + 使用Android 8.1.0（核心！无versioncompare依赖）
       - name: Create Cordova Project
         run: |
+          # 创建项目
           cordova create my-app com.example.myapp MyApp
           cd my-app
+          
+          # 添加www页面
           echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>My App</title><style>body{text-align:center;padding:60px;font-size:24px;}</style></head><body><h1>Hello Android!</h1><p>✅ APK BUILD SUCCESS ✅</p></body></html>" > www/index.html
-          cordova platform add android@9.1.0 --save
+          
+          # 关键：添加Android 8.1.0平台（无versioncompare依赖）
+          cordova platform add android@8.1.0 --save
+          
+          # 生成项目文件（无需修改gradle）
           cordova prepare android
+          
+          # 放开权限
           sudo chmod -R 777 platforms/android/
           sudo chown -R runner:runner platforms/android/
 
-      # 7. 构建APK（核心：安全修改仓库，避免语法错误）
+      # 7. 构建APK（无任何gradle修改，直接构建）
       - name: Build Android APK
         run: |
           cd my-app
-          cd platforms/android
-
-          # ========== 核心修复1：安全修改Cordova核心脚本，删除依赖注入 ==========
-          # 逐行删除包含versioncompare的行（避免语法错误）
-          sed -i '/com\.g00fy2:versioncompare:1\.3\.4/d' CordovaLib/cordova.gradle
-          sed -i '/versioncompare/d' build.gradle
-          sed -i '/versioncompare/d' app/build.gradle
-          # 验证删除结果
-          echo "===== 验证versioncompare是否删除 ====="
-          grep -rn "versioncompare" . --include="*.gradle" || echo "✅ 所有gradle文件中已无versioncompare"
-
-          # ========== 核心修复2：根build.gradle - 分步添加仓库（安全写法） ==========
-          # 1. 在buildscript的repositories前清空原有内容，添加Jcenter镜像（逐行添加，避免括号错误）
-          sed -i '/buildscript {/a \    repositories {' build.gradle
-          sed -i '/buildscript {/a \    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }' build.gradle
-          sed -i '/buildscript {/a \    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        mavenCentral()' build.gradle
-          sed -i '/buildscript {/a \    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }' build.gradle
-          sed -i '/buildscript {/a \    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' build.gradle
-          # 2. 删除原有重复的repositories行
-          sed -i '/buildscript.*repositories.*jcenter/d' build.gradle
-          sed -i '/buildscript.*repositories.*mavenCentral/d' build.gradle
-
-          # ========== 核心修复3：app/build.gradle - 分步添加仓库 ==========
-          sed -i '/buildscript {/a \    repositories {\n        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' app/build.gradle
-          sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' app/build.gradle
-          sed -i '/jcenter()/d' app/build.gradle
-
-          # ========== 核心修复4：CordovaLib/build.gradle ==========
-          sed -i '/repositories {/a \        maven { url "https://maven.aliyun.com/repository/jcenter" }\n        mavenCentral()\n        maven { url "https://maven.aliyun.com/repository/public" }\n        maven { url "https://maven.aliyun.com/repository/google" }' CordovaLib/build.gradle
-          sed -i '/jcenter()/d' CordovaLib/build.gradle
-
-          # ========== 验证语法正确性 ==========
-          echo "===== 根build.gradle前50行（验证语法） ====="
-          head -50 build.gradle
-          echo "========================================"
-
-          # ========== 修改gradle.properties ==========
-          echo "android.useAndroidX=false" >> gradle.properties
-          echo "enableJetifier=false" >> gradle.properties
-          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> gradle.properties
-          echo "org.gradle.daemon=false" >> gradle.properties
-
-          # ========== 构建APK（语法安全） ==========
-          cd ../..
-          export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL="https://services.gradle.org/distributions/gradle-5.5.1-all.zip"
-          # 简化构建命令，避免参数导致的语法问题
-          gradle -p platforms/android cdvBuildDebug --info
+          # 直接构建，无需任何gradle修改
+          cordova build android --debug --verbose
 
       # 8. 复制并上传APK
       - name: Copy & Upload APK
