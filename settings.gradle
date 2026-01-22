@@ -1,11 +1,3 @@
-// settings.gradle
-dependencyResolutionManagement {
-    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
+// settings.gradle (minimal, compatible)
 rootProject.name = "MyAgoraWebApp"
 include(":app")
