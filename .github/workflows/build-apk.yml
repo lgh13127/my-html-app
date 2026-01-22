@@ -17,36 +17,44 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'   # <- 改为 17
+          java-version: '17'
 
       - name: Install prerequisites
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends wget unzip
 
-      - name: Set ANDROID_SDK_ROOT (use runner temp)
+      - name: Prepare Android SDK directory and env
         run: |
-          echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
-          mkdir -p "$RUNNER_TEMP/android-sdk/cmdline-tools"
+          SDK_DIR="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> $GITHUB_ENV
+          # ensure cmdline-tools target dir exists
+          mkdir -p "$SDK_DIR/cmdline-tools"
 
       - name: Install Android command line tools
         run: |
-          cd "$RUNNER_TEMP/android-sdk"
+          SDK_DIR="$RUNNER_TEMP/android-sdk"
+          cd "$SDK_DIR"
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip -d cmdline-tools
           mkdir -p cmdline-tools/latest
           mv cmdline-tools/cmdline-tools/* cmdline-tools/latest/ || true
-          echo "PATH=$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+          echo "PATH=$SDK_DIR/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+          echo "Installed Android commandline tools into $SDK_DIR"
 
       - name: Accept Android SDK licenses
         run: |
-          yes | "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin/sdkmanager" --licenses
+          SDK_DIR="$RUNNER_TEMP/android-sdk"
+          yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --licenses
 
       - name: Install Android SDK components
         run: |
-          "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+          SDK_DIR="$RUNNER_TEMP/android-sdk"
+          "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
-      - name: Install Gradle 8.1.1 locally on runner
+      - name: Install Gradle 8.1.1 on runner
         run: |
           GRADLE_VERSION=8.1.1
           wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O "$RUNNER_TEMP/gradle.zip"
@@ -54,14 +62,14 @@ jobs:
           echo "GRADLE_HOME=$RUNNER_TEMP/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
           echo "PATH=$RUNNER_TEMP/gradle-${GRADLE_VERSION}/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Show Java and Gradle info
+      - name: Show Java/Gradle/SDK info
         run: |
+          echo "JAVA_HOME=$JAVA_HOME"
           java -version || true
           gradle --version || true
-          if [ -x "./gradlew" ]; then
-            echo "Gradle wrapper exists; showing wrapper version:"
-            ./gradlew --version || true
-          fi
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          ls -la "$RUNNER_TEMP/android-sdk"
 
       - name: Build debug APK (capture log)
         run: |
