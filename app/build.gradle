@@ -1,7 +1,6 @@
-plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-}
+// app/build.gradle (use apply plugin style so kotlin plugin is loaded from buildscript classpath)
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
 
 android {
     namespace 'com.example.myagorawebapp'
@@ -20,7 +19,7 @@ android {
         targetCompatibility JavaVersion.VERSION_11
     }
 
-    // kotlinOptions 在 Android 项目中可以放在这里
+    // kotlinOptions for Android Kotlin plugin
     kotlinOptions {
         jvmTarget = "11"
     }
