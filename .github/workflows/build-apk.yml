@@ -22,7 +22,7 @@ jobs:
       - name: Install prerequisites
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends wget unzip gradle
+          sudo apt-get install -y --no-install-recommends wget unzip
 
       - name: Set ANDROID_SDK_ROOT (use runner temp)
         run: |
@@ -46,18 +46,42 @@ jobs:
         run: |
           "$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
+      - name: Install Gradle 8.1.1 locally on runner
+        run: |
+          GRADLE_VERSION=8.1.1
+          GRADLE_DIR="$RUNNER_TEMP/gradle-${GRADLE_VERSION}"
+          mkdir -p "$GRADLE_DIR"
+          wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O "$RUNNER_TEMP/gradle.zip"
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          # gradle will unpack to $RUNNER_TEMP/gradle-8.1.1
+          echo "GRADLE_HOME=$RUNNER_TEMP/gradle-${GRADLE_VERSION}" >> $GITHUB_ENV
+          echo "PATH=$RUNNER_TEMP/gradle-${GRADLE_VERSION}/bin:$PATH" >> $GITHUB_ENV
+
       - name: Show Java and Gradle info
         run: |
           java -version || true
           gradle --version || true
-
-      - name: Build debug APK
-        run: |
-          # Prefer ./gradlew if you have committed the gradle wrapper. Otherwise use system gradle.
           if [ -x "./gradlew" ]; then
-            ./gradlew clean assembleDebug --no-daemon --stacktrace
+            echo "Gradle wrapper exists; showing wrapper version:"
+            ./gradlew --version || true
+          fi
+
+      - name: Build debug APK (capture log)
+        run: |
+          set -o pipefail
+          mkdir -p build-logs
+          # Prefer project gradle wrapper if present, otherwise use the downloaded gradle
+          if [ -x "./gradlew" ]; then
+            ./gradlew clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build-logs/build.log
+            EXIT_CODE=${PIPESTATUS[0]}
           else
-            gradle clean assembleDebug --no-daemon --stacktrace
+            gradle clean assembleDebug --no-daemon --stacktrace 2>&1 | tee build-logs/build.log
+            EXIT_CODE=${PIPESTATUS[0]}
+          fi
+          echo "Gradle exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::error::Gradle failed, see build-logs/build.log"
+            exit $EXIT_CODE
           fi
 
       - name: Upload debug APK artifact
@@ -65,3 +89,10 @@ jobs:
         with:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload build log (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: build-logs/build.log
