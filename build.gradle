@@ -1,12 +1,13 @@
-// Root project build.gradle (minimal)
-// Keeps build logic simple; plugin versions are controlled via settings.gradle pluginManagement.
-
+// build.gradle (root)
 buildscript {
-    // Not strictly necessary when using pluginManagement in settings.gradle,
-    // but kept for compatibility if some older scripts use buildscript block.
+    ext.kotlin_version = '1.8.22'
     repositories {
         google()
         mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.1.1"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlin_version}"
     }
 }
 
