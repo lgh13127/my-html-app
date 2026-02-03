@@ -27,12 +27,7 @@
         android:theme="@style/AppTheme">  <!-- <- 添加这行 -->
 
         <!-- 3. 声明后台保活服务（前台服务，避免被系统杀死） -->
-        <service
-            android:name=".BackgroundKeepAliveService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="microphone|phoneCall" /> <!-- Android 12+ 需指定前台服务类型 -->
-
+        
         <activity android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
